@@ -19,8 +19,8 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { createTrackSystem } from './trackBuilder.js?v=1.3';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=1.3';
+import { createTrackSystem } from './trackBuilder.js?v=1.4';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=1.4';
 
 const _mat4 = new THREE.Matrix4();
 const _quat = new THREE.Quaternion();
@@ -1119,8 +1119,9 @@ export function buildCityWorld(materials, shaderSystem) {
   ];
   parkSpots.forEach(([gx, gz], idx) => {
     if (!isFootprintClear(gx, gz, 2.5)) return;
+    if (IS_MOBILE_DEVICE && idx % 2 === 1) return;
     const gSurfY = track.getSupportSurface(gx, 0.5, gz).y;
-    if (idx % 3 === 0) {
+    if (idx % 3 === 0 && (!IS_MOBILE_DEVICE || quiverTreePoses.length < 3)) {
       quiverTreePoses.push({ x: gx, y: gSurfY - 0.02, z: gz, yaw: idx * 1.3, scale: 1.75 });
     } else {
       broadleafTreePoses.push({ x: gx, y: gSurfY - 0.03, z: gz, yaw: idx * 2.1, scale: 1.04 + (idx % 3) * 0.14 });

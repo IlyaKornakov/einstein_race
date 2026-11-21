@@ -2,15 +2,15 @@
  * Relativistic Grand Prix — Main Game Loop, Rest-Frame Radar & Twin-Paradox Race Manager
  */
 
-import { ObserverState, MinkowskiMetric } from './physics/spacetime.js?v=1.3';
-import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=1.3';
-import { VehicleController } from './physics/vehicle.js?v=1.3';
-import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=1.3';
-import { buildPBRMaterialLibrary } from './render/textures.js?v=1.3';
-import { buildCityWorld } from './world/cityBuilder.js?v=1.3';
-import { EntityManager } from './world/entities.js?v=1.3';
-import { RelativisticRenderer } from './render/renderer.js?v=1.3';
-import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=1.3';
+import { ObserverState, MinkowskiMetric } from './physics/spacetime.js?v=1.4';
+import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=1.4';
+import { VehicleController } from './physics/vehicle.js?v=1.4';
+import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=1.4';
+import { buildPBRMaterialLibrary } from './render/textures.js?v=1.4';
+import { buildCityWorld } from './world/cityBuilder.js?v=1.4';
+import { EntityManager } from './world/entities.js?v=1.4';
+import { RelativisticRenderer } from './render/renderer.js?v=1.4';
+import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=1.4';
 
 function formatClock(seconds) {
   const s = Math.max(0, seconds);
@@ -708,7 +708,135 @@ function bindUI(metric, vehicle, entities, renderer, audio, startNewGrandPrix, r
     finishModal?.classList.add('hidden');
   });
 
-  // Bind Mobile On-Screen Touch Driving Buttons (`data-vkey`)
+  // Bind AAA Mobile Racing Controls:
+  //   1) TouchDrive-style Auto-Gas (ON by default on coarse-pointer touch screens, toggleable!)
+  //   2) Continuous Analog Steering Slider (`#touchSteerTrack`) + Optional Gyroscope Tilt Steering!
+  //   3) Dedicated BRAKE / BOOST / Recover pedals
+  const isTouchScreen =
+    typeof window !== 'undefined' &&
+    ((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 1);
+
+  const btnAutoGas = document.getElementById('btnToggleAutoGas');
+  const btnMobileGas = document.getElementById('btnMobileGas');
+  const btnTiltSteer = document.getElementById('btnToggleTiltSteer');
+  const steerTrack = document.getElementById('touchSteerTrack');
+  const steerPuck = document.getElementById('touchSteerPuck');
+  const tiltHint = document.getElementById('tiltSteerHint');
+
+  const applyAutoGasState = (enabled) => {
+    vehicle.autoThrottle = enabled;
+    if (btnAutoGas) {
+      btnAutoGas.textContent = enabled ? 'Auto-Gas: ON' : 'Auto-Gas: OFF';
+      btnAutoGas.classList.toggle('active', enabled);
+    }
+    if (btnMobileGas) {
+      btnMobileGas.classList.toggle('hidden', enabled);
+    }
+  };
+  if (isTouchScreen) {
+    applyAutoGasState(true);
+  }
+  btnAutoGas?.addEventListener('click', (e) => {
+    e.preventDefault();
+    applyAutoGasState(!vehicle.autoThrottle);
+  });
+
+  // Analog Touch Steering Track (`[-1..+1]` proportional steering)
+  let steerPointerId = null;
+  let tiltModeEnabled = false;
+
+  const updateAnalogSteerFromClientX = (clientX) => {
+    if (!steerTrack) return;
+    const rect = steerTrack.getBoundingClientRect();
+    const cx = rect.left + rect.width * 0.5;
+    const maxSpan = Math.max(36, rect.width * 0.34);
+    let norm = (clientX - cx) / maxSpan;
+    norm = Math.max(-1.0, Math.min(1.0, norm));
+    if (Math.abs(norm) < 0.05) norm = 0.0;
+    vehicle.analogSteer = norm;
+    if (steerPuck) {
+      steerPuck.style.transform = `translateX(${(norm * maxSpan).toFixed(1)}px)`;
+    }
+  };
+
+  const resetAnalogSteer = () => {
+    steerPointerId = null;
+    if (!tiltModeEnabled) vehicle.analogSteer = 0.0;
+    steerTrack?.classList.remove('dragging');
+    if (steerPuck) steerPuck.style.transform = 'translateX(0px)';
+  };
+
+  if (steerTrack) {
+    steerTrack.addEventListener('pointerdown', (e) => {
+      if (tiltModeEnabled) return;
+      if (e.cancelable) e.preventDefault();
+      steerPointerId = e.pointerId;
+      steerTrack.classList.add('dragging');
+      if (steerTrack.setPointerCapture) {
+        try { steerTrack.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+      updateAnalogSteerFromClientX(e.clientX);
+    });
+    steerTrack.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== steerPointerId || tiltModeEnabled) return;
+      if (e.cancelable) e.preventDefault();
+      updateAnalogSteerFromClientX(e.clientX);
+    });
+    steerTrack.addEventListener('pointerup', (e) => {
+      if (e.pointerId === steerPointerId) resetAnalogSteer();
+    });
+    steerTrack.addEventListener('pointercancel', (e) => {
+      if (e.pointerId === steerPointerId) resetAnalogSteer();
+    });
+    steerTrack.addEventListener('lostpointercapture', resetAnalogSteer);
+    steerTrack.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  // Optional Phone Gyroscope Tilt Steering (`deviceorientation`)
+  const onDeviceOrientation = (e) => {
+    if (!tiltModeEnabled) return;
+    const angle = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+    let tiltDeg = 0.0;
+    if (angle === 90) {
+      tiltDeg = e.beta || 0.0;
+    } else if (angle === -90 || angle === 270) {
+      tiltDeg = -(e.beta || 0.0);
+    } else {
+      tiltDeg = e.gamma || 0.0;
+    }
+    let norm = Math.max(-1.0, Math.min(1.0, tiltDeg / 24.0));
+    if (Math.abs(norm) < 0.06) norm = 0.0;
+    vehicle.analogSteer = norm;
+  };
+
+  btnTiltSteer?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!tiltModeEnabled) {
+      if (
+        typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function'
+      ) {
+        try {
+          const perm = await DeviceOrientationEvent.requestPermission();
+          if (perm !== 'granted') return;
+        } catch (_) {
+          return;
+        }
+      }
+      tiltModeEnabled = true;
+      window.addEventListener('deviceorientation', onDeviceOrientation, true);
+    } else {
+      tiltModeEnabled = false;
+      vehicle.analogSteer = 0.0;
+      window.removeEventListener('deviceorientation', onDeviceOrientation, true);
+    }
+    btnTiltSteer.textContent = tiltModeEnabled ? 'Steer: Tilt' : 'Steer: Touch';
+    btnTiltSteer.classList.toggle('active', tiltModeEnabled);
+    steerTrack?.classList.toggle('hidden', tiltModeEnabled);
+    tiltHint?.classList.toggle('hidden', !tiltModeEnabled);
+  });
+
+  // Bind Mobile Right-Thumb Pedals (`BRAKE`, `BOOST`, optional manual `GAS`)
   document.querySelectorAll('.touch-btn[data-vkey]').forEach((btn) => {
     const code = btn.dataset.vkey;
     const setPressed = (pressed, ev) => {

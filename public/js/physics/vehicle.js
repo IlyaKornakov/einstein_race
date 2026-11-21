@@ -105,9 +105,14 @@ export class VehicleController {
     /** Input state */
     this.keys = new Set();
     this.virtualKeys = new Set();
+    /** Continuous analog steering input [-1..+1] from touch steering slider or phone gyro tilt */
+    this.analogSteer = 0.0;
+    /** Mobile TouchDrive-style Auto-Accelerate (enabled automatically on touch screens, toggleable) */
+    this.autoThrottle = false;
     this.pointerLocked = false;
     this.isDraggingLook = false;
     this.activeTouchLookId = null;
+    this.lastTapMs = 0;
     this.lastPointerX = 0;
     this.lastPointerY = 0;
     this.brakeZeroHoldTimer = 0.0;
@@ -168,11 +173,19 @@ export class VehicleController {
       this.activeTouchLookId = null;
     });
 
-    // Touch-drag free-look on WebGL canvas (ignores multi-touch on HUD/pedals)
+    // Touch-drag free-look on WebGL canvas + double-tap canvas to recenter camera
     canvas.addEventListener(
       'touchstart',
       (e) => {
-        if (this.activeTouchLookId !== null || e.changedTouches.length === 0) return;
+        if (e.changedTouches.length === 0) return;
+        const now = performance.now();
+        if (now - this.lastTapMs < 280) {
+          this.recenteringView = true;
+          this.lastTapMs = 0;
+          return;
+        }
+        this.lastTapMs = now;
+        if (this.activeTouchLookId !== null) return;
         const t = e.changedTouches[0];
         this.activeTouchLookId = t.identifier;
         this.recenteringView = false;
@@ -384,12 +397,13 @@ export class VehicleController {
     const c = this.metric.c;
     const c2 = c * c;
 
-    const throttle = this.canDrive && (this._hasInput('KeyW') || this._hasInput('ArrowUp'));
     const brake = this.canDrive && (this._hasInput('KeyS') || this._hasInput('ArrowDown'));
+    const handbrake = this._hasInput('Space');
+    const wantBoost = this.canDrive && (this._hasInput('ShiftLeft') || this._hasInput('ShiftRight'));
+    const manualThrottle = this._hasInput('KeyW') || this._hasInput('ArrowUp') || wantBoost;
+    const throttle = this.canDrive && (manualThrottle || (this.autoThrottle && !brake && !handbrake));
     const steerLeft = this.canDrive && (this._hasInput('KeyA') || this._hasInput('ArrowLeft'));
     const steerRight = this.canDrive && (this._hasInput('KeyD') || this._hasInput('ArrowRight'));
-    const wantBoost = this.canDrive && (this._hasInput('ShiftLeft') || this._hasInput('ShiftRight'));
-    const handbrake = this._hasInput('Space');
     this.isBraking = brake || handbrake;
 
     if (wantBoost && throttle && this.boostEnergy > 0.02) {
@@ -540,10 +554,14 @@ export class VehicleController {
 
     pFwd = Math.max(minPFwd, Math.min(maxPFwd, pFwd));
 
-    // 2. Relativistic Ackerman + Tire-Grip Steering & Post-Impact Slip Recovery
-    const rawSteer = (steerRight ? 1 : 0) - (steerLeft ? 1 : 0);
+    // 2. Relativistic Ackerman + Tire-Grip Steering (supports smooth analog mobile touch/tilt!)
+    const keySteer = (steerRight ? 1 : 0) - (steerLeft ? 1 : 0);
+    const analogClamped = this.canDrive ? Math.max(-1.0, Math.min(1.0, this.analogSteer)) : 0.0;
+    const rawSteer = keySteer !== 0
+      ? keySteer
+      : Math.sign(analogClamped) * Math.pow(Math.abs(analogClamped), 1.28);
     const targetSteerAngle = rawSteer * this.maxSteerRad;
-    this.steerAngle += (targetSteerAngle - this.steerAngle) * Math.min(1.0, 12.0 * dt);
+    this.steerAngle += (targetSteerAngle - this.steerAngle) * Math.min(1.0, 14.0 * dt);
 
     const gammaHoriz = Math.sqrt(1.0 + (pFwd * pFwd + pLat * pLat) / c2);
     const vFwd = pFwd / gammaHoriz;

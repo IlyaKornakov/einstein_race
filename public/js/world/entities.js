@@ -18,7 +18,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../../vendor/DRACOLoader.js';
 import { clone as cloneSkeleton } from '../../vendor/SkeletonUtils.js';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=1.3';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=1.4';
 
 export const RACER_ROSTER = [
   { name: 'H. Lorentz',   hex: 0x2563eb, css: '#3b82f6', kind: 'ferrari', topBeta: 0.82, skywayMod: 2 },
@@ -30,124 +30,14 @@ export const RACER_ROSTER = [
 
 const PEDESTRIAN_TINTS = [0x3b82f6, 0xd97706, 0x10b981, 0xe11d48, 0x8b5cf6, 0x64748b, 0x0ea5e9];
 
-// Hidden high-poly interior/caliper submesh names inside `ferrari.glb` (~148k tris per car!)
-const FERRARI_HEAVY_INTERIOR_NAMES = new Set([
-  'interior_light',
-  'interior_dark',
-  'leather',
-  'steering_leather',
-  'steering_column',
-  'steering_carbon',
+// Truly hidden inner-wheel brake caliper & lug-nut submeshes on AI opponent Ferraris
+// (never remove cockpit/leather/steering — Ferrari 458 Spider is an open-top roadster!)
+const FERRARI_AI_HIDDEN_WHEEL_PARTS = new Set([
   'brakes',
   'brake',
   'nuts',
   'wipers',
-  'trim',
-  'carpet',
 ]);
-
-/**
- * Fast spatial-grid BufferGeometry simplifier run ONCE on Draco-decoded `ferrari.glb` on mobile
- * so 4 supercars never overflow mobile TBDR tile parameter buffers (~358k -> ~18k tris/car).
- */
-function simplifyGeometryMobile(geo, gridRes = 44) {
-  const posAttr = geo.getAttribute('position');
-  const idxAttr = geo.getIndex();
-  if (!posAttr || posAttr.count < 1800) return geo;
-
-  const vCount = posAttr.count;
-  geo.computeBoundingBox();
-  const bb = geo.boundingBox;
-  const sx = Math.max(1e-5, bb.max.x - bb.min.x);
-  const sy = Math.max(1e-5, bb.max.y - bb.min.y);
-  const sz = Math.max(1e-5, bb.max.z - bb.min.z);
-  const cell = Math.max(sx, sy, sz) / gridRes;
-
-  const nrmAttr = geo.getAttribute('normal');
-  const uvAttr = geo.getAttribute('uv');
-  const vertToCluster = new Int32Array(vCount);
-  const clusterMap = new Map();
-  let nClusters = 0;
-
-  for (let i = 0; i < vCount; i++) {
-    const qx = Math.floor((posAttr.getX(i) - bb.min.x) / cell);
-    const qy = Math.floor((posAttr.getY(i) - bb.min.y) / cell);
-    const qz = Math.floor((posAttr.getZ(i) - bb.min.z) / cell);
-    const key = qx * 1048576 + qy * 1024 + qz;
-    let cid = clusterMap.get(key);
-    if (cid === undefined) {
-      cid = nClusters++;
-      clusterMap.set(key, cid);
-    }
-    vertToCluster[i] = cid;
-  }
-
-  const sumP = new Float32Array(nClusters * 3);
-  const sumN = nrmAttr ? new Float32Array(nClusters * 3) : null;
-  const sumUV = uvAttr ? new Float32Array(nClusters * 2) : null;
-  const counts = new Uint32Array(nClusters);
-
-  for (let i = 0; i < vCount; i++) {
-    const c = vertToCluster[i];
-    counts[c]++;
-    sumP[c * 3] += posAttr.getX(i);
-    sumP[c * 3 + 1] += posAttr.getY(i);
-    sumP[c * 3 + 2] += posAttr.getZ(i);
-    if (sumN) {
-      sumN[c * 3] += nrmAttr.getX(i);
-      sumN[c * 3 + 1] += nrmAttr.getY(i);
-      sumN[c * 3 + 2] += nrmAttr.getZ(i);
-    }
-    if (sumUV) {
-      sumUV[c * 2] += uvAttr.getX(i);
-      sumUV[c * 2 + 1] += uvAttr.getY(i);
-    }
-  }
-
-  for (let c = 0; c < nClusters; c++) {
-    const inv = 1.0 / Math.max(1, counts[c]);
-    sumP[c * 3] *= inv;
-    sumP[c * 3 + 1] *= inv;
-    sumP[c * 3 + 2] *= inv;
-    if (sumN) {
-      const nx = sumN[c * 3], ny = sumN[c * 3 + 1], nz = sumN[c * 3 + 2];
-      const len = Math.hypot(nx, ny, nz) || 1.0;
-      sumN[c * 3] = nx / len;
-      sumN[c * 3 + 1] = ny / len;
-      sumN[c * 3 + 2] = nz / len;
-    }
-    if (sumUV) {
-      sumUV[c * 2] *= inv;
-      sumUV[c * 2 + 1] *= inv;
-    }
-  }
-
-  const triCount = idxAttr ? Math.floor(idxAttr.count / 3) : Math.floor(vCount / 3);
-  const outIndices = [];
-  for (let t = 0; t < triCount; t++) {
-    const i0 = idxAttr ? idxAttr.getX(t * 3) : t * 3;
-    const i1 = idxAttr ? idxAttr.getX(t * 3 + 1) : t * 3 + 1;
-    const i2 = idxAttr ? idxAttr.getX(t * 3 + 2) : t * 3 + 2;
-    const c0 = vertToCluster[i0];
-    const c1 = vertToCluster[i1];
-    const c2 = vertToCluster[i2];
-    if (c0 !== c1 && c1 !== c2 && c2 !== c0) {
-      outIndices.push(c0, c1, c2);
-    }
-  }
-  if (outIndices.length < 36) return geo;
-
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(sumP, 3));
-  if (sumN) out.setAttribute('normal', new THREE.BufferAttribute(sumN, 3));
-  if (sumUV) {
-    const uvBuf = new THREE.BufferAttribute(sumUV, 2);
-    out.setAttribute('uv', uvBuf);
-    out.setAttribute('uv1', uvBuf);
-  }
-  out.setIndex(outIndices);
-  return out;
-}
 
 /**
  * Exact 2D Oriented Bounding Box Separating Axis Theorem (SAT) intersection test.
@@ -360,32 +250,32 @@ export class EntityManager {
       });
 
     const manifest = [
-      ['ferrari', './assets/models/ferrari.glb?v=1.3'],
-      ['concept', './assets/models/CarConcept.glb?v=1.3'],
-      ['truck', './assets/models/CesiumMilkTruck.glb?v=1.3'],
-      ['soldier', './assets/models/Soldier.glb?v=1.3'],
-      ['cesiumMan', './assets/models/CesiumMan.glb?v=1.3'],
-      ['hvGirl', './assets/models/HVGirl.glb?v=1.3'],
-      ['broadleafTree', './assets/models/broadleaf_tree.glb?v=1.3'],
-      ['quiverTree', './assets/models/quiver_tree.glb?v=1.3'],
-      ['lantern', './assets/models/Lantern.glb?v=1.3'],
-      ['streetLampModern', './assets/models/street_lamp_modern.glb?v=1.3'],
-      ['gothicStatue', './assets/models/gothic_statue.glb?v=1.3'],
-      ['marbleBust', './assets/models/marble_bust.glb?v=1.3'],
-      ['horseStatue', './assets/models/horse_statue.glb?v=1.3'],
-      ['wallClock', './assets/models/wall_clock.glb?v=1.3'],
-      ['oldTyre', './assets/models/old_tyre.glb?v=1.3'],
-      ['trafficCone', './assets/models/traffic_cone.glb?v=1.3'],
-      ['pottedPlant', './assets/models/potted_plant.glb?v=1.3'],
-      ['coffeeCart', './assets/models/coffee_cart.glb?v=1.3'],
+      ['ferrari', './assets/models/ferrari.glb?v=1.4'],
+      ['concept', './assets/models/CarConcept.glb?v=1.4'],
+      ['truck', './assets/models/CesiumMilkTruck.glb?v=1.4'],
+      ['soldier', './assets/models/Soldier.glb?v=1.4'],
+      ['cesiumMan', './assets/models/CesiumMan.glb?v=1.4'],
+      ['hvGirl', './assets/models/HVGirl.glb?v=1.4'],
+      ['broadleafTree', './assets/models/broadleaf_tree.glb?v=1.4'],
+      ['quiverTree', './assets/models/quiver_tree.glb?v=1.4'],
+      ['lantern', './assets/models/Lantern.glb?v=1.4'],
+      ['streetLampModern', './assets/models/street_lamp_modern.glb?v=1.4'],
+      ['gothicStatue', './assets/models/gothic_statue.glb?v=1.4'],
+      ['marbleBust', './assets/models/marble_bust.glb?v=1.4'],
+      ['horseStatue', './assets/models/horse_statue.glb?v=1.4'],
+      ['wallClock', './assets/models/wall_clock.glb?v=1.4'],
+      ['oldTyre', './assets/models/old_tyre.glb?v=1.4'],
+      ['trafficCone', './assets/models/traffic_cone.glb?v=1.4'],
+      ['pottedPlant', './assets/models/potted_plant.glb?v=1.4'],
+      ['coffeeCart', './assets/models/coffee_cart.glb?v=1.4'],
       ...(IS_MOBILE_DEVICE
         ? []
         : [
-            ['xbot', './assets/models/Xbot.glb?v=1.3'],
-            ['michelle', './assets/models/Michelle.glb?v=1.3'],
-            ['flamingo', './assets/models/Flamingo.glb?v=1.3'],
-            ['stork', './assets/models/Stork.glb?v=1.3'],
-            ['horse', './assets/models/Horse.glb?v=1.3'],
+            ['xbot', './assets/models/Xbot.glb?v=1.4'],
+            ['michelle', './assets/models/Michelle.glb?v=1.4'],
+            ['flamingo', './assets/models/Flamingo.glb?v=1.4'],
+            ['stork', './assets/models/Stork.glb?v=1.4'],
+            ['horse', './assets/models/Horse.glb?v=1.4'],
           ]),
     ];
 
@@ -410,26 +300,10 @@ export class EntityManager {
     const glbs = Object.fromEntries(entries);
     const ferrariAOTex = await loadTex('./assets/models/ferrari_ao.png');
 
-    // On mobile TBDR GPUs, simplify Draco-decoded `ferrari.glb` meshes once so 4 supercars
-    // take ~70k triangles total instead of 1.43 million!
-    if (IS_MOBILE_DEVICE && glbs.ferrari && glbs.ferrari.scene) {
-      const toRemove = [];
-      glbs.ferrari.scene.traverse((obj) => {
-        if (!obj.isMesh) return;
-        const nm = (obj.name || '').toLowerCase();
-        if (FERRARI_HEAVY_INTERIOR_NAMES.has(nm)) {
-          toRemove.push(obj);
-        } else if (obj.geometry) {
-          obj.geometry = simplifyGeometryMobile(obj.geometry, 42);
-        }
-      });
-      toRemove.forEach((o) => o.parent && o.parent.remove(o));
-    }
-
     // 1. Populate all botanical SpeedTrees, statues, clocks, tire stacks & café carts in CityWorld!
     this.cityWorld.populatePropsFromGLBs(glbs);
 
-    // 2. Instantiate Player Rosso Corsa Ferrari 458 Italia
+    // 2. Instantiate Player Rosso Corsa Ferrari 458 Italia (100% pristine showroom geometry!)
     this.playerCar = this._instantiateFerrari(glbs.ferrari, ferrariAOTex, 0xd41218, { isCoMoving: true });
     this.group.add(this.playerCar.root);
 
@@ -503,11 +377,11 @@ export class EntityManager {
   _instantiateFerrari(ferrariGltf, aoTex, bodyHex, { isCoMoving = false } = {}) {
     const root = new THREE.Group();
     const model = ferrariGltf.scene.clone(true);
-    // Strip ~148k hidden interior/caliper triangles on AI opponent Ferraris (dark-tinted windows!)
+    // On AI Ferraris, omit only inner-hub brake calipers & lug nuts; keep 100% of body, cockpit, seats & steering!
     if (!isCoMoving) {
       const hidden = [];
       model.traverse((obj) => {
-        if (obj.isMesh && FERRARI_HEAVY_INTERIOR_NAMES.has((obj.name || '').toLowerCase())) {
+        if (obj.isMesh && FERRARI_AI_HIDDEN_WHEEL_PARTS.has((obj.name || '').toLowerCase())) {
           hidden.push(obj);
         }
       });

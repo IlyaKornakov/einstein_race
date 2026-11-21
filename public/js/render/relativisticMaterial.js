@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { computeCalibratedSpectralMatrix, getSpectralGLSL } from '../physics/spectral.js?v=1.3';
+import { computeCalibratedSpectralMatrix, getSpectralGLSL } from '../physics/spectral.js?v=1.4';
 
 export class RelativisticShaderSystem {
   /**
