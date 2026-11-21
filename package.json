@@ -1,0 +1,10 @@
+{
+  "name": "relativistic-grand-prix",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Relativistic Grand Prix — Real-time WebGL2 3D Special Relativity racing & free-roam simulation",
+  "scripts": {
+    "start": "python3 server.py --host 127.0.0.1 --port 8080"
+  },
+  "license": "MIT"
+}

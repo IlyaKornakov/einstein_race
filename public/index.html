@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relativistic Grand Prix — Special Relativity 3D Racing</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="glCanvas"></canvas>
+
+  <!-- Startup Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-card">
+      <div class="loading-title">RELATIVISTIC GRAND PRIX</div>
+      <div class="loading-sub" id="loadingStatus">Loading PBR world, SpeedTree foliage &amp; glTF supercars…</div>
+      <div class="loading-bar-track">
+        <div class="loading-bar-fill" id="loadingBar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Race Countdown Banner -->
+  <div id="countdownBanner" class="countdown-banner hidden">3</div>
+
+  <!-- Grand Prix Finish / Twin-Paradox Podium Overlay -->
+  <div id="finishModal" class="finish-modal hidden">
+    <div class="finish-card">
+      <div class="finish-badge">CHEQUERED FLAG • 3 LAPS</div>
+      <h2 id="finishHeadline" class="finish-title">1ST PLACE!</h2>
+      <div class="finish-clocks-grid">
+        <div class="finish-stat">
+          <span>DRIVER PROPER TIME (τ)</span>
+          <strong id="finishProperTime">01:12.40</strong>
+        </div>
+        <div class="finish-stat">
+          <span>GRANDSTAND CITY TIME (t)</span>
+          <strong id="finishCityTime">01:38.90</strong>
+        </div>
+        <div class="finish-stat accent">
+          <span>TWIN-PARADOX TIME SAVED</span>
+          <strong id="finishTimeSaved">26.50s younger!</strong>
+        </div>
+      </div>
+      <div id="finishStandings" class="finish-standings"></div>
+      <div class="finish-actions">
+        <button id="btnRaceAgain" class="primary-btn">Race Again</button>
+        <button id="btnContinueRoam" class="secondary-btn">Keep Driving (Free Roam)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top-Left Sleek Controls & Camera / Physics Bar -->
+  <div id="hudTopLeft" class="hud-panel hud-top-left">
+    <div class="brand-row">
+      <span class="brand-badge">SR GP</span>
+      <span class="brand-name">Relativistic Circuit</span>
+      <span id="fpsReadout" class="fps-pill">60 FPS</span>
+      <button id="togglePhysicsBtn" class="settings-pill" title="Open Spacetime &amp; Physics Tuning">⚙ Physics</button>
+    </div>
+    <div class="controls-compact">
+      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>↑←↓→</kbd> Drive &nbsp;<kbd>M</kbd> Radio</span>
+      <span><kbd>Shift</kbd> Boost &nbsp;<kbd>Space</kbd> Drift &nbsp;<kbd>R</kbd> Recover</span>
+    </div>
+    <div class="cam-pills-row">
+      <span class="cam-label">View <kbd>V</kbd></span>
+      <button class="pill-btn cam-btn active" data-cam="chase">Chase</button>
+      <button class="pill-btn cam-btn" data-cam="cockpit">Cockpit</button>
+      <button class="pill-btn cam-btn" data-cam="bumper">Hood</button>
+      <button id="btnToggleSound" class="pill-btn audio-pill active" title="Toggle Master Audio (Cockpit V8 + Relativistic City Sound)">🔊</button>
+      <button id="btnToggleMusic" class="pill-btn audio-pill active" title="Toggle In-Car Synthwave Radio [M] — Plays at invariant 1.0× speed in your own reference frame!">🎵</button>
+    </div>
+
+    <!-- Collapsible Physics Tuning Popover (Hidden by default to keep UI clean!) -->
+    <div id="physicsDrawer" class="physics-drawer hidden">
+      <div class="slider-group">
+        <div class="slider-header">
+          <span>Speed of Light <em>c</em></span>
+          <strong id="cValueLabel">25.0 m/s</strong>
+        </div>
+        <input id="cSlider" type="range" min="8" max="250" step="0.5" value="25" />
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span>Solar Cycle &amp; Time of Day</span>
+          <strong id="todLabel">15:12</strong>
+        </div>
+        <div class="tod-pills">
+          <button class="pill-btn tod-btn" data-tod="6.35">Sunrise</button>
+          <button class="pill-btn tod-btn" data-tod="12.2">Noon</button>
+          <button class="pill-btn tod-btn" data-tod="17.8">Sunset</button>
+          <button class="pill-btn tod-btn" data-tod="22.5">Night</button>
+        </div>
+        <label class="check-row" style="margin-top:3px;">
+          <input type="checkbox" id="chkAutoDayCycle" checked />
+          <span>Dynamic Sun Cycle (Dilates w/ γ!)</span>
+        </label>
+      </div>
+
+      <div class="toggles-section">
+        <div class="section-caption">Relativistic Effects</div>
+        <label class="check-row"><input type="checkbox" id="chkRetardation" checked /><span>Light-Time Retardation (Terrell)</span></label>
+        <label class="check-row"><input type="checkbox" id="chkLorentz" checked /><span>Lorentz Contraction &amp; Dilation</span></label>
+        <label class="check-row"><input type="checkbox" id="chkAberration" checked /><span>Relativistic Aberration (Starbow)</span></label>
+        <label class="check-row"><input type="checkbox" id="chkDoppler" checked /><span>Spectral Doppler (UV / RGB / IR)</span></label>
+        <label class="check-row"><input type="checkbox" id="chkBeaming" checked /><span>Headlight Beaming (D⁴)</span></label>
+        <label class="check-row"><input type="checkbox" id="chkAccelEquiv" checked /><span>Turn / Accel Gravity (Equivalence)</span></label>
+      </div>
+
+      <div class="toggles-section">
+        <div class="section-caption">Audio Reference Frames</div>
+        <label class="check-row"><input type="checkbox" id="chkEnvAudio" checked /><span>Environment Sound (Relativistic D)</span></label>
+        <label class="check-row"><input type="checkbox" id="chkCarMusic" checked /><span>In-Car Radio Music (Own Frame τ)</span></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top-Right Grand Prix Race Standings & Lap Counter -->
+  <div id="hudTopRight" class="hud-panel hud-race">
+    <div class="race-top-row">
+      <div class="pos-block">
+        <span class="pos-label">POS</span>
+        <strong id="racePosReadout" class="pos-num">1<span>/6</span></strong>
+      </div>
+      <div class="lap-block">
+        <span class="pos-label">LAP</span>
+        <strong id="raceLapReadout" class="lap-num">1<span>/3</span></strong>
+      </div>
+      <button id="btnNewRace" class="race-restart-btn" title="Restart 3-Lap Grand Prix">↻ Restart GP</button>
+    </div>
+    <div id="leaderboardList" class="leaderboard-list"></div>
+  </div>
+
+  <!-- Bottom-Left Observer Rest-Frame Relativistic Radar / Minimap -->
+  <div id="hudMinimap" class="hud-panel hud-minimap" title="Observer Rest-Frame Radar — Track &amp; opponents Lorentz-contract by 1/γ along your velocity vector!">
+    <div class="minimap-header">
+      <span id="minimapTitle">VIEWER FRAME (1.00×)</span>
+      <button id="btnToggleMapFrame" class="map-frame-pill" title="Switch between Viewer Rest Frame (Lorentz-contracted) and Static City Frame">Viewer</button>
+    </div>
+    <canvas id="minimapCanvas" width="188" height="188"></canvas>
+    <div class="minimap-sub">
+      <span><i class="dot-loop"></i>Loop</span>
+      <span><i class="dot-sky"></i>Skyway</span>
+      <span><i class="dot-opp"></i>Racers</span>
+    </div>
+  </div>
+
+  <!-- Bottom-Center Automotive Relativistic Telemetry Cluster -->
+  <div id="hudBottom" class="hud-panel hud-bottom">
+    <div class="speed-cluster">
+      <div class="beta-main">
+        <span id="betaReadout">0.000</span><span class="beta-unit">c</span>
+        <span id="gearBadge" class="gear-badge hidden">REV</span>
+        <span id="terrainBadge" class="terrain-badge hidden">TURF</span>
+        <div class="boost-wrap" title="Photon Thruster Boost [Hold Shift]">
+          <span class="boost-lbl">BOOST</span>
+          <div class="boost-track"><div id="boostBarFill" class="boost-fill"></div></div>
+        </div>
+      </div>
+      <div class="beta-bar-track">
+        <div id="betaBarFill" class="beta-bar-fill"></div>
+      </div>
+      <div class="sub-metrics">
+        <span><strong id="mpsReadout">0.0</strong> m/s</span>
+        <span>γ = <strong id="gammaReadout">1.000</strong></span>
+        <span>Alt <strong id="altReadout">0.0m</strong></span>
+        <span><strong id="gForceReadout">0.0g</strong></span>
+      </div>
+    </div>
+
+    <div class="clocks-cluster">
+      <div class="clock-line">
+        <span class="clock-label">COCKPIT (τ)</span>
+        <span id="properClock" class="clock-val">00:00.00</span>
+      </div>
+      <div class="clock-line">
+        <span class="clock-label">CITY (t)</span>
+        <span id="coordClock" class="clock-val">00:00.00</span>
+      </div>
+      <div class="doppler-swatch-row">
+        <span id="solarClockBadge" class="solar-badge" title="City Solar Time — Sun moves γ× faster at relativistic speeds!">☀ 15:12</span>
+        <span id="redLightSwatch" class="light-swatch"></span>
+        <span id="redLightLabel" class="swatch-text">632→632nm</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
