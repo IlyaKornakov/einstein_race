@@ -121,7 +121,7 @@ export class RelativisticShaderSystem {
     const metricGLSL = this.metric.getShaderModule();
     const spectralGLSL = getSpectralGLSL();
 
-    const cacheTag = `rel_sr_v4_${material.type}`;
+    const cacheTag = `rel_sr_v5_${material.type}`;
     material.customProgramCacheKey = () => cacheTag;
 
     material.onBeforeCompile = (shader) => {
@@ -138,17 +138,14 @@ export class RelativisticShaderSystem {
       shader.uniforms.uRoadPolish = { value: roadPolish };
       shader.uniforms.uInteriorRoom = { value: interiorRoom };
 
-      // 1. Vertex Shader Injection
+      // 1. Vertex Shader Injection (packed into 4 vec4 varyings so mobile MAX_VARYING_VECTORS=15 never overflows!)
       shader.vertexShader = shader.vertexShader.replace(
         'void main() {',
         /* glsl */ `
-        varying float vRelDoppler;
-        varying float vRelEmitCoordTime;
-        varying vec3 vCityEmitOffset;
-        varying vec3 vObsLocalPos;
-        varying vec3 vRestWorldPos;
-        varying vec3 vRestWorldNormal;
-        varying vec2 vSurfUV;
+        varying vec4 vRelEmitAndD;
+        varying vec4 vRelLocalAndT;
+        varying vec4 vRelRestPosU;
+        varying vec4 vRelRestNrmV;
         uniform float uIsDynamic;
         uniform float uIsCoMoving;
         uniform vec3 uEntityPosNow;
@@ -160,7 +157,7 @@ export class RelativisticShaderSystem {
         ${metricGLSL}
 
         void main() {
-          vSurfUV = uv;
+          vec2 relSurfUV = uv;
         `
       );
 
@@ -183,7 +180,7 @@ export class RelativisticShaderSystem {
         #endif
         relWorld4 = modelMatrix * relWorld4;
         vec3 relUncontractedWorld = relWorld4.xyz;
-        vRestWorldNormal = normalize( mat3( modelMatrix ) * relNrmLocal );
+        vec3 relRestWorldNrm = normalize( mat3( modelMatrix ) * relNrmLocal );
 
         // Optional static clock-hand retarded coordinate-time rotation
         if ( abs( uClockSpinOmega ) > 1e-6 ) {
@@ -196,7 +193,8 @@ export class RelativisticShaderSystem {
           }
           relUncontractedWorld = pIter;
         }
-        vRestWorldPos = relUncontractedWorld;
+        vRelRestPosU = vec4( relUncontractedWorld, relSurfUV.x );
+        vRelRestNrmV = vec4( relRestWorldNrm, relSurfUV.y );
 
         RelativisticObservation relObs;
         vec3 relDummyNormal;
@@ -246,10 +244,8 @@ export class RelativisticShaderSystem {
           );
         }
 
-        vRelDoppler = relObs.dopplerFactor;
-        vRelEmitCoordTime = relObs.emitCoordTime;
-        vCityEmitOffset = relObs.cityEmitOffset;
-        vObsLocalPos = relObs.observerLocalPos;
+        vRelEmitAndD = vec4( relObs.cityEmitOffset, relObs.dopplerFactor );
+        vRelLocalAndT = vec4( relObs.observerLocalPos, relObs.emitCoordTime );
         vec4 mvPosition = viewMatrix * vec4( uObsPos + relObs.observerLocalPos, 1.0 );
         gl_Position = projectionMatrix * mvPosition;
         `
@@ -264,21 +260,21 @@ export class RelativisticShaderSystem {
         `
       );
 
-      // 2. Fragment Shader Injection:
-      //    - Dual-scale macro anti-tiling & architectural ground-contact AO
-      //    - Next-gen specular racing-line tarmac roughness
-      //    - 3D Parallax Interior Mapping inside apartment & skyscraper windows
-      //    - Exact Per-Pixel Relativistic Doppler, Rindler Gravity Shift & Aerial Perspective!
+      // 2. Fragment Shader Injection (unpacks the 4 packed vec4 varyings)
       shader.fragmentShader = shader.fragmentShader.replace(
         'void main() {',
         /* glsl */ `
-        varying float vRelDoppler;
-        varying float vRelEmitCoordTime;
-        varying vec3 vCityEmitOffset;
-        varying vec3 vObsLocalPos;
-        varying vec3 vRestWorldPos;
-        varying vec3 vRestWorldNormal;
-        varying vec2 vSurfUV;
+        varying vec4 vRelEmitAndD;
+        varying vec4 vRelLocalAndT;
+        varying vec4 vRelRestPosU;
+        varying vec4 vRelRestNrmV;
+        #define vCityEmitOffset (vRelEmitAndD.xyz)
+        #define vRelDoppler (vRelEmitAndD.w)
+        #define vObsLocalPos (vRelLocalAndT.xyz)
+        #define vRelEmitCoordTime (vRelLocalAndT.w)
+        #define vRestWorldPos (vRelRestPosU.xyz)
+        #define vRestWorldNormal (vRelRestNrmV.xyz)
+        #define vSurfUV (vec2(vRelRestPosU.w, vRelRestNrmV.w))
         uniform float uIsDynamic;
         uniform float uIsCoMoving;
         uniform vec3 uEntityBeta;
@@ -493,7 +489,7 @@ export class RelativisticShaderSystem {
             float heightFalloff = exp( -max( 0.0, vRestWorldPos.y ) * 0.020 );
             float fogAmt = clamp( ( 1.0 - exp( -max( 0.0, dPx - 38.0 ) * 0.0022 ) ) * heightFalloff, 0.0, 0.62 );
             vec3 restHaze = uSkyHorizon * mix( 0.88, 0.25, uNightFactor );
-            vec3 shiftedHaze = applyRelativisticSpectrumCustom( restHaze, fragDoppler, 0.88, 0.94, 0.0, 0.38 );
+            vec3 shiftedHaze = applyRelativisticHazeSpectrum( restHaze, fragDoppler );
             finalRad = mix( finalRad, shiftedHaze, fogAmt );
           }
 

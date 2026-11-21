@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../../vendor/DRACOLoader.js';
 import { clone as cloneSkeleton } from '../../vendor/SkeletonUtils.js';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js';
 
 export const RACER_ROSTER = [
   { name: 'H. Lorentz',   hex: 0x2563eb, css: '#3b82f6', kind: 'ferrari', topBeta: 0.82, skywayMod: 2 },
@@ -187,14 +188,51 @@ export class EntityManager {
   async loadAssets(onProgress = null) {
     const dracoLoader = new DRACOLoader();
     dracoLoader.setDecoderPath('./vendor/draco/');
+    dracoLoader.setWorkerLimit(IS_MOBILE_DEVICE ? 1 : 2);
 
     const gltfLoader = new GLTFLoader();
     gltfLoader.setDRACOLoader(dracoLoader);
     const texLoader = new THREE.TextureLoader();
 
+    const downscaleGLBTexturesOnMobile = (gltf) => {
+      if (!IS_MOBILE_DEVICE || !gltf || !gltf.scene) return;
+      const seen = new Set();
+      gltf.scene.traverse((obj) => {
+        if (!obj.isMesh || !obj.material) return;
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const m of mats) {
+          for (const prop of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap']) {
+            const t = m[prop];
+            if (!t || seen.has(t) || !t.image) continue;
+            seen.add(t);
+            const w = t.image.width || 0;
+            const h = t.image.height || 0;
+            if (w > 512 || h > 512) {
+              const s = 512 / Math.max(w, h);
+              const cv = document.createElement('canvas');
+              cv.width = Math.max(32, Math.round(w * s));
+              cv.height = Math.max(32, Math.round(h * s));
+              const c2d = cv.getContext('2d');
+              c2d.drawImage(t.image, 0, 0, cv.width, cv.height);
+              t.image = cv;
+              t.needsUpdate = true;
+            }
+          }
+        }
+      });
+    };
+
     const loadGLB = (url) =>
       new Promise((resolve, reject) => {
-        gltfLoader.load(url, resolve, undefined, reject);
+        gltfLoader.load(
+          url,
+          (gltf) => {
+            downscaleGLBTexturesOnMobile(gltf);
+            resolve(gltf);
+          },
+          undefined,
+          reject
+        );
       });
 
     const loadTex = (url) =>
@@ -228,15 +266,24 @@ export class EntityManager {
       ['horse', './assets/models/Horse.glb'],
     ];
 
+    // Load GLBs with bounded concurrency (2 on mobile, 4 on desktop) so Firefox Android
+    // never suffers a 23-file parallel ArrayBuffer + WASM Draco heap spike!
     let done = 0;
-    const entries = await Promise.all(
-      manifest.map(async ([key, url]) => {
+    let cursor = 0;
+    const entries = new Array(manifest.length);
+    const concurrency = IS_MOBILE_DEVICE ? 2 : 4;
+
+    const worker = async () => {
+      while (cursor < manifest.length) {
+        const idx = cursor++;
+        const [key, url] = manifest[idx];
         const gltf = await loadGLB(url);
+        entries[idx] = [key, gltf];
         done++;
         if (onProgress) onProgress(done / manifest.length, key);
-        return [key, gltf];
-      })
-    );
+      }
+    };
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
     const glbs = Object.fromEntries(entries);
     const ferrariAOTex = await loadTex('./assets/models/ferrari_ao.png');
 
@@ -322,6 +369,7 @@ export class EntityManager {
       isCoMoving,
     });
 
+    const CarBodyMat = IS_MOBILE_DEVICE ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
     const brakeMaterials = [];
     this.shaderSystem.patchHierarchy(model, uniforms, {
       castShadow: true,
@@ -330,13 +378,12 @@ export class EntityManager {
         const nm = (mat.name || '').toLowerCase();
         if (nm === 'body_color') {
           return {
-            material: new THREE.MeshPhysicalMaterial({
+            material: new CarBodyMat({
               name: 'FerrariClearcoatPaint',
               color: new THREE.Color(bodyHex),
               metalness: 0.58,
               roughness: 0.15,
-              clearcoat: 1.0,
-              clearcoatRoughness: 0.03,
+              ...(IS_MOBILE_DEVICE ? {} : { clearcoat: 1.0, clearcoatRoughness: 0.03 }),
               envMapIntensity: 1.85,
             }),
             matOpts: { uvWeight: 0.68, nirWeight: 0.55 },
@@ -344,15 +391,14 @@ export class EntityManager {
         }
         if (nm.includes('glass') && !nm.includes('taillight') && !nm.includes('projector')) {
           return {
-            material: new THREE.MeshPhysicalMaterial({
+            material: new CarBodyMat({
               name: 'FerrariGlass',
               color: new THREE.Color(0x111822),
               metalness: 0.1,
               roughness: 0.04,
               transparent: true,
               opacity: 0.44,
-              clearcoat: 1.0,
-              clearcoatRoughness: 0.02,
+              ...(IS_MOBILE_DEVICE ? {} : { clearcoat: 1.0, clearcoatRoughness: 0.02 }),
               envMapIntensity: 2.1,
             }),
           };
@@ -428,6 +474,7 @@ export class EntityManager {
     model.scale.setScalar(0.92);
     root.add(model);
 
+    const CarBodyMat = IS_MOBILE_DEVICE ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
     const uniforms = this.shaderSystem.createEntityUniforms({ isDynamic: true });
     this.shaderSystem.patchHierarchy(model, uniforms, {
       castShadow: true,
@@ -436,12 +483,11 @@ export class EntityManager {
         const nm = (mat.name || '').toLowerCase();
         if (nm.includes('paint 1')) {
           return {
-            material: new THREE.MeshPhysicalMaterial({
+            material: new CarBodyMat({
               color: new THREE.Color(bodyHex),
               metalness: 0.65,
               roughness: 0.15,
-              clearcoat: 1.0,
-              clearcoatRoughness: 0.03,
+              ...(IS_MOBILE_DEVICE ? {} : { clearcoat: 1.0, clearcoatRoughness: 0.03 }),
               envMapIntensity: 1.85,
             }),
             matOpts: { uvWeight: 0.68, nirWeight: 0.55 },
@@ -676,7 +722,7 @@ export class EntityManager {
       this.pedestrians.push({ root, mixer, uniforms, isStaticPerformer: true, x: px, y: py, z: pz });
     }
 
-    const numWalkers = 17;
+    const numWalkers = IS_MOBILE_DEVICE ? 9 : 17;
     for (let i = 0; i < numWalkers; i++) {
       const choice = i % 4;
       let srcGltf, rotOffset = 0.0, scale = 1.0, walkClip = null;
@@ -806,13 +852,13 @@ export class EntityManager {
     const root = new THREE.Group();
     const uniforms = this.shaderSystem.createEntityUniforms({ isDynamic: true });
 
+    const TrainBodyMat = IS_MOBILE_DEVICE ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
     const bodyWhite = this.shaderSystem.patchMaterial(
-      new THREE.MeshPhysicalMaterial({
+      new TrainBodyMat({
         color: 0xf4f7fb,
         roughness: 0.16,
         metalness: 0.25,
-        clearcoat: 0.92,
-        clearcoatRoughness: 0.04,
+        ...(IS_MOBILE_DEVICE ? {} : { clearcoat: 0.92, clearcoatRoughness: 0.04 }),
         envMapIntensity: 1.55,
       }),
       uniforms

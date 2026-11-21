@@ -104,8 +104,10 @@ export class VehicleController {
 
     /** Input state */
     this.keys = new Set();
+    this.virtualKeys = new Set();
     this.pointerLocked = false;
     this.isDraggingLook = false;
+    this.activeTouchLookId = null;
     this.lastPointerX = 0;
     this.lastPointerY = 0;
     this.brakeZeroHoldTimer = 0.0;
@@ -161,8 +163,57 @@ export class VehicleController {
 
     window.addEventListener('blur', () => {
       this.keys.clear();
+      this.virtualKeys.clear();
       this.isDraggingLook = false;
+      this.activeTouchLookId = null;
     });
+
+    // Touch-drag free-look on WebGL canvas (ignores multi-touch on HUD/pedals)
+    canvas.addEventListener(
+      'touchstart',
+      (e) => {
+        if (this.activeTouchLookId !== null || e.changedTouches.length === 0) return;
+        const t = e.changedTouches[0];
+        this.activeTouchLookId = t.identifier;
+        this.recenteringView = false;
+        this.lastPointerX = t.clientX;
+        this.lastPointerY = t.clientY;
+      },
+      { passive: true }
+    );
+
+    canvas.addEventListener(
+      'touchmove',
+      (e) => {
+        if (this.activeTouchLookId === null) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === this.activeTouchLookId) {
+            const dx = t.clientX - this.lastPointerX;
+            const dy = t.clientY - this.lastPointerY;
+            this.lastPointerX = t.clientX;
+            this.lastPointerY = t.clientY;
+            const sens = 0.0042;
+            this.lookYawOffset = this._wrapPi(this.lookYawOffset + dx * sens);
+            this.camPitch = Math.max(-1.25, Math.min(1.25, this.camPitch - dy * sens));
+            break;
+          }
+        }
+      },
+      { passive: true }
+    );
+
+    const endTouchLook = (e) => {
+      if (this.activeTouchLookId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === this.activeTouchLookId) {
+          this.activeTouchLookId = null;
+          break;
+        }
+      }
+    };
+    window.addEventListener('touchend', endTouchLook, { passive: true });
+    window.addEventListener('touchcancel', endTouchLook, { passive: true });
 
     canvas.addEventListener('mousedown', (e) => {
       if (e.button === 2) {
@@ -316,17 +367,29 @@ export class VehicleController {
     }
   }
 
+  setVirtualKey(code, pressed) {
+    if (pressed) {
+      this.virtualKeys.add(code);
+    } else {
+      this.virtualKeys.delete(code);
+    }
+  }
+
+  _hasInput(code) {
+    return this.keys.has(code) || this.virtualKeys.has(code);
+  }
+
   update(dtProper) {
     const dt = Math.min(0.05, Math.max(0.0001, dtProper));
     const c = this.metric.c;
     const c2 = c * c;
 
-    const throttle = this.canDrive && (this.keys.has('KeyW') || this.keys.has('ArrowUp'));
-    const brake = this.canDrive && (this.keys.has('KeyS') || this.keys.has('ArrowDown'));
-    const steerLeft = this.canDrive && (this.keys.has('KeyA') || this.keys.has('ArrowLeft'));
-    const steerRight = this.canDrive && (this.keys.has('KeyD') || this.keys.has('ArrowRight'));
-    const wantBoost = this.canDrive && (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'));
-    const handbrake = this.keys.has('Space');
+    const throttle = this.canDrive && (this._hasInput('KeyW') || this._hasInput('ArrowUp'));
+    const brake = this.canDrive && (this._hasInput('KeyS') || this._hasInput('ArrowDown'));
+    const steerLeft = this.canDrive && (this._hasInput('KeyA') || this._hasInput('ArrowLeft'));
+    const steerRight = this.canDrive && (this._hasInput('KeyD') || this._hasInput('ArrowRight'));
+    const wantBoost = this.canDrive && (this._hasInput('ShiftLeft') || this._hasInput('ShiftRight'));
+    const handbrake = this._hasInput('Space');
     this.isBraking = brake || handbrake;
 
     if (wantBoost && throttle && this.boostEnergy > 0.02) {
@@ -535,11 +598,11 @@ export class VehicleController {
 
     // 3. 3D Spline Elevation, Slope & Banking Tracking
     const surfNow = this.getSupportSurface(this.carX, this.footY, this.carZ);
-    const surfAhead = this.getSupportSurface(this.carX + fwdX * 1.8, this.footY + 0.45, this.carZ + fwdZ * 1.8);
+    const surfAhead = this.getSupportSurface(this.carX + fwdX * 1.8, this.footY + 0.65, this.carZ + fwdZ * 1.8);
 
     let rampSlope = 0.0;
-    if (Math.abs(surfAhead.y - surfNow.y) < 1.55) {
-      rampSlope = Math.max(-0.42, Math.min(0.42, (surfAhead.y - surfNow.y) / 1.8));
+    if (Math.abs(surfAhead.y - surfNow.y) < 2.2) {
+      rampSlope = Math.max(-0.78, Math.min(0.78, (surfAhead.y - surfNow.y) / 1.8));
     }
     this.movePitch += (rampSlope - this.movePitch) * Math.min(1.0, 14.0 * dt);
     this.roadBank += ((surfNow.bank || 0.0) - this.roadBank) * Math.min(1.0, 10.0 * dt);
@@ -646,16 +709,17 @@ export class VehicleController {
     const targetRoll = Math.max(-0.065, Math.min(0.065, -this.properLatG * 0.011)) + this.roadBank + rumbleRoll;
     this.chassisRoll += (targetRoll - this.chassisRoll) * Math.min(1.0, 10.0 * dt);
 
-    // Settle vertical foot height onto active track/terrain deck
+    // Settle vertical foot height onto active track/terrain deck with strict non-penetration invariant!
     const finalSurf = this.getSupportSurface(this.carX, this.footY, this.carZ);
     this.currentTerrain = finalSurf.terrain || this.currentTerrain;
     const rumbleY = terrainRumbleAmp * 1.6 * Math.abs(Math.sin(this.rumblePhase * 3.1)) * Math.min(1.0, Math.abs(vFwdCoord) / 4.0);
     const targetFootY = finalSurf.y + rumbleY;
-    if (this.footY <= targetFootY + 0.25) {
-      this.footY += (targetFootY - this.footY) * Math.min(1.0, 22.0 * dt);
-      this.verticalVel = 0.0;
-    } else if (this.footY < targetFootY) {
+    if (this.footY < targetFootY) {
+      // Hard solid-earth floor invariant: vehicle can NEVER sink below active support surface!
       this.footY = targetFootY;
+      this.verticalVel = Math.max(0.0, this.verticalVel);
+    } else if (this.footY <= targetFootY + 0.28) {
+      this.footY += (targetFootY - this.footY) * Math.min(1.0, 22.0 * dt);
       this.verticalVel = 0.0;
     }
 
@@ -788,8 +852,9 @@ export class VehicleController {
         cx += bCam.nx * (bCam.pen + 0.35);
         cz += bCam.nz * (bCam.pen + 0.35);
       }
+      const camSurf = this.getSupportSurface(cx, this.footY, cz);
       this.observer.event[1] = cx + shakeX;
-      this.observer.event[2] = this.footY + chaseHeight + shakeY;
+      this.observer.event[2] = Math.max(camSurf.y + 0.58, this.footY + chaseHeight) + shakeY;
       this.observer.event[3] = cz;
     }
   }

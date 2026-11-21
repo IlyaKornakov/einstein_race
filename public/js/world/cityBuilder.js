@@ -567,6 +567,11 @@ export function buildCityWorld(materials, shaderSystem) {
   {
     pushTransformed(buckets.sidewalkCobble, makeSubdividedBox(33.0, 0.32, 48.0, 0.22, 1.8), -26.5, 0.0, -38.0);
     pushTransformed(buckets.stoneAshlar, makeSubdividedBox(12.5, 2.80, 30.0, 0.22, 1.5), -35.2, 1.40, -38.0);
+    // Register vertical West/North/South 2.8m retaining walls of the raised Observation Terrace
+    // (`maxY = 2.15` so ground cars bounce off the cliff while cars atop the 2.80m terrace drive freely!)
+    track.registerSolidBox(-41.2, -38.0, 0.45, 15.1, 0.0, 2.15);
+    track.registerSolidBox(-35.2, -52.8, 6.3, 0.45, 0.0, 2.15);
+    track.registerSolidBox(-35.2, -23.2, 6.3, 0.45, 0.0, 2.15);
 
     const numSteps = 14;
     const stepRun = 10.0 / numSteps;

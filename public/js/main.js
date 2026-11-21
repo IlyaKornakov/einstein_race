@@ -360,10 +360,16 @@ async function init() {
     cityWorld
   );
 
-  // Warmup GPU shaders before hiding loading screen
-  setProgress(98, 'Compiling relativistic past-light-cone PBR shaders…');
+  // Staggered GPU shader compilation & warmup so mobile GPU watchdogs never time out
+  setProgress(97, 'Compiling relativistic past-light-cone PBR shaders…');
   await new Promise((r) => requestAnimationFrame(r));
   entities.update(0.016, 0.016, observer, vehicle, 0.0);
+  try {
+    renderer.threeRenderer.compile(renderer.scene, renderer.camera);
+  } catch (compileErr) {
+    console.warn('Shader pre-compile warning:', compileErr);
+  }
+  await new Promise((r) => requestAnimationFrame(r));
   renderer.renderFrame(observer, vehicle, entities, 0.016, 0.016);
 
   setProgress(100, 'Ready!');
@@ -700,6 +706,31 @@ function bindUI(metric, vehicle, entities, renderer, audio, startNewGrandPrix, r
   document.getElementById('btnContinueRoam')?.addEventListener('click', () => {
     raceState.mode = 'freeroam';
     finishModal?.classList.add('hidden');
+  });
+
+  // Bind Mobile On-Screen Touch Driving Buttons (`data-vkey`)
+  document.querySelectorAll('.touch-btn[data-vkey]').forEach((btn) => {
+    const code = btn.dataset.vkey;
+    const setPressed = (pressed, ev) => {
+      if (ev && ev.cancelable) ev.preventDefault();
+      btn.classList.toggle('active', pressed);
+      vehicle.setVirtualKey(code, pressed);
+    };
+    btn.addEventListener('pointerdown', (e) => {
+      if (btn.setPointerCapture) {
+        try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+      setPressed(true, e);
+    });
+    btn.addEventListener('pointerup', (e) => setPressed(false, e));
+    btn.addEventListener('pointercancel', (e) => setPressed(false, e));
+    btn.addEventListener('lostpointercapture', () => setPressed(false, null));
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  });
+
+  document.getElementById('btnMobileRecover')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (vehicle.onRecoverRequest) vehicle.onRecoverRequest();
   });
 
   window.addEventListener('keydown', (e) => {

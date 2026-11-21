@@ -8,12 +8,15 @@
  */
 
 import * as THREE from 'three';
+import { IS_MOBILE_DEVICE } from './renderer.js';
 
 function makeCanvasTexture(width, height, drawFn, { srgb = true, repeat = true, aniso = 8 } = {}) {
+  const scale = IS_MOBILE_DEVICE ? 0.5 : 1.0;
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = Math.max(64, Math.round(width * scale));
+  canvas.height = Math.max(64, Math.round(height * scale));
   const ctx = canvas.getContext('2d');
+  if (scale !== 1.0) ctx.scale(scale, scale);
   drawFn(ctx, width, height);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
@@ -26,13 +29,27 @@ function makeCanvasTexture(width, height, drawFn, { srgb = true, repeat = true, 
 
 export async function buildPBRMaterialLibrary(threeRenderer, shaderSystem) {
   const loader = new THREE.TextureLoader();
-  const maxAniso = Math.min(16, threeRenderer.capabilities.getMaxAnisotropy() || 8);
+  const maxAniso = Math.min(
+    IS_MOBILE_DEVICE ? 4 : 16,
+    threeRenderer.capabilities.getMaxAnisotropy() || 4
+  );
 
   const loadTex = (url, { srgb = false, repeat = true } = {}) =>
     new Promise((resolve, reject) => {
       loader.load(
         url,
         (tex) => {
+          // On mobile browsers (e.g. Firefox Android), cap 1024px PBR maps to 512px before GPU upload
+          // to save ~118 MB of uncompressed RGBA mipmap VRAM without losing crispness on phone screens!
+          if (IS_MOBILE_DEVICE && tex.image && (tex.image.width > 512 || tex.image.height > 512)) {
+            const s = 512 / Math.max(tex.image.width, tex.image.height);
+            const cv = document.createElement('canvas');
+            cv.width = Math.max(64, Math.round(tex.image.width * s));
+            cv.height = Math.max(64, Math.round(tex.image.height * s));
+            const c2d = cv.getContext('2d');
+            c2d.drawImage(tex.image, 0, 0, cv.width, cv.height);
+            tex.image = cv;
+          }
           tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
           tex.wrapS = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
           tex.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
@@ -100,8 +117,10 @@ export async function buildPBRMaterialLibrary(threeRenderer, shaderSystem) {
     return shaderSystem.patchMaterial(mat, shaderSystem.staticEntityUniforms, matOpts);
   };
 
+  const MatPhysOrStd = IS_MOBILE_DEVICE ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
+
   // 1. Next-Gen Roads (Polished Racing Line + Specular Clearcoat Sheen), Sidewalks & Architecture
-  const roadAsphalt = new THREE.MeshPhysicalMaterial({
+  const roadAsphalt = new MatPhysOrStd({
     name: 'RoadAsphalt',
     map: roadAsphaltSet.map,
     normalMap: roadAsphaltSet.normalMap,
@@ -111,8 +130,7 @@ export async function buildPBRMaterialLibrary(threeRenderer, shaderSystem) {
     normalScale: new THREE.Vector2(0.95, 0.95),
     roughness: 0.88,
     metalness: 0.0,
-    clearcoat: 0.28,
-    clearcoatRoughness: 0.24,
+    ...(IS_MOBILE_DEVICE ? {} : { clearcoat: 0.28, clearcoatRoughness: 0.24 }),
     aoMapIntensity: 0.9,
     envMapIntensity: 1.25,
   });
@@ -126,7 +144,7 @@ export async function buildPBRMaterialLibrary(threeRenderer, shaderSystem) {
     envMapIntensity: 0.95,
   }, { macroDetail: 0.35, roadPolish: 0.55 });
 
-  const highwayRoad = new THREE.MeshPhysicalMaterial({
+  const highwayRoad = new MatPhysOrStd({
     name: 'HighwayRoad',
     map: highwayRoadSet.map,
     normalMap: highwayRoadSet.normalMap,
@@ -136,8 +154,7 @@ export async function buildPBRMaterialLibrary(threeRenderer, shaderSystem) {
     normalScale: new THREE.Vector2(0.85, 0.85),
     roughness: 0.85,
     metalness: 0.0,
-    clearcoat: 0.26,
-    clearcoatRoughness: 0.26,
+    ...(IS_MOBILE_DEVICE ? {} : { clearcoat: 0.26, clearcoatRoughness: 0.26 }),
     aoMapIntensity: 0.9,
     envMapIntensity: 1.2,
   });
@@ -184,7 +201,7 @@ export async function buildPBRMaterialLibrary(threeRenderer, shaderSystem) {
     envMapIntensity: 0.65,
   }, { macroDetail: 0.60 });
 
-  const windowAtlas = new THREE.MeshPhysicalMaterial({
+  const windowAtlas = new MatPhysOrStd({
     name: 'WindowAtlas',
     map: windowAtlasSet.map,
     normalMap: windowAtlasSet.normalMap,
@@ -196,8 +213,7 @@ export async function buildPBRMaterialLibrary(threeRenderer, shaderSystem) {
     emissiveIntensity: 0.35,
     roughness: 0.18,
     metalness: 0.05,
-    clearcoat: 0.90,
-    clearcoatRoughness: 0.05,
+    ...(IS_MOBILE_DEVICE ? {} : { clearcoat: 0.90, clearcoatRoughness: 0.05 }),
     envMapIntensity: 1.75,
   });
   shaderSystem.patchMaterial(windowAtlas, shaderSystem.staticEntityUniforms, {
@@ -373,7 +389,7 @@ export async function buildPBRMaterialLibrary(threeRenderer, shaderSystem) {
   }, { aniso: maxAniso });
 
   const skyscraperGlass = shaderSystem.patchMaterial(
-    new THREE.MeshPhysicalMaterial({
+    new MatPhysOrStd({
       name: 'SkyscraperGlass',
       map: glassCurtainMap,
       emissiveMap: glassCurtainEmissive,
@@ -381,8 +397,7 @@ export async function buildPBRMaterialLibrary(threeRenderer, shaderSystem) {
       emissiveIntensity: 0.25,
       roughness: 0.06,
       metalness: 0.25,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.03,
+      ...(IS_MOBILE_DEVICE ? {} : { clearcoat: 1.0, clearcoatRoughness: 0.03 }),
       envMapIntensity: 2.05,
     }),
     shaderSystem.staticEntityUniforms,
@@ -747,15 +762,14 @@ export async function buildPBRMaterialLibrary(threeRenderer, shaderSystem) {
 
   // 9. Off-Road Infield Reflecting Lagoon Water & Sand Trap Materials
   const waterLagoon = shaderSystem.patchMaterial(
-    new THREE.MeshPhysicalMaterial({
+    new MatPhysOrStd({
       name: 'WaterLagoon',
       color: new THREE.Color(0x093a54),
       normalMap: roofTilesSet.normalMap,
       normalScale: new THREE.Vector2(0.28, 0.28),
       roughness: 0.05,
       metalness: 0.08,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.03,
+      ...(IS_MOBILE_DEVICE ? {} : { clearcoat: 1.0, clearcoatRoughness: 0.03 }),
       envMapIntensity: 2.25,
     })
   );

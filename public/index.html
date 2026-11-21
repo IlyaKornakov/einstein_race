@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Relativistic Grand Prix — Special Relativity 3D Racing</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=1.1" />
   <script type="importmap">
     {
       "imports": {
@@ -193,6 +193,24 @@
     </div>
   </div>
 
-  <script type="module" src="./js/main.js"></script>
+  <!-- Auto-Detected Mobile Touch Controls (Hidden on desktop, shown on touch devices) -->
+  <div id="mobileControls" class="mobile-controls" aria-label="Touch driving controls">
+    <div class="touch-cluster touch-left">
+      <button type="button" class="touch-btn touch-steer" data-vkey="ArrowLeft" aria-label="Steer Left">◀</button>
+      <button type="button" class="touch-btn touch-steer" data-vkey="ArrowRight" aria-label="Steer Right">▶</button>
+    </div>
+    <div class="touch-cluster touch-right">
+      <div class="touch-aux-row">
+        <button type="button" id="btnMobileRecover" class="touch-btn touch-aux" title="Recover onto track">↻</button>
+        <button type="button" class="touch-btn touch-boost" data-vkey="ShiftLeft">BOOST</button>
+      </div>
+      <div class="touch-pedals-row">
+        <button type="button" class="touch-btn touch-brake" data-vkey="ArrowDown">BRK</button>
+        <button type="button" class="touch-btn touch-gas" data-vkey="ArrowUp">GAS</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js?v=1.1"></script>
 </body>
 </html>

@@ -18,6 +18,16 @@ import { UnrealBloomPass } from '../../vendor/UnrealBloomPass.js';
 import { OutputPass } from '../../vendor/OutputPass.js';
 import { ShaderPass } from '../../vendor/ShaderPass.js';
 
+export const IS_MOBILE_DEVICE =
+  typeof navigator !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') ||
+    (navigator.maxTouchPoints > 1 &&
+      typeof window !== 'undefined' &&
+      Math.min(window.innerWidth, window.innerHeight) < 920));
+
+export const IS_FIREFOX_BROWSER =
+  typeof navigator !== 'undefined' && /Firefox/i.test(navigator.userAgent || '');
+
 const ModernGameGradeShader = {
   name: 'ModernGameGradeShader',
   uniforms: {
@@ -100,20 +110,48 @@ export class RelativisticRenderer {
       autoDayCycle: true,
     };
 
-    // 1. WebGLRenderer setup
+    // 1. WebGLRenderer setup (memory-safe profile on Mobile & Firefox Android!)
+    this.isMobile = IS_MOBILE_DEVICE;
+    this.contextLost = false;
+
+    canvas.addEventListener(
+      'webglcontextlost',
+      (e) => {
+        e.preventDefault();
+        this.contextLost = true;
+      },
+      false
+    );
+    canvas.addEventListener(
+      'webglcontextrestored',
+      () => {
+        this.contextLost = false;
+        this.updateTimeOfDayLighting(true);
+      },
+      false
+    );
+
     this.threeRenderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
-      powerPreference: 'high-performance',
+      antialias: false,
+      powerPreference: this.isMobile ? 'default' : 'high-performance',
       stencil: false,
     });
-    this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    const maxDpr = this.isMobile ? 1.25 : 1.5;
+    this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
     this.threeRenderer.setSize(window.innerWidth, window.innerHeight, false);
     this.threeRenderer.outputColorSpace = THREE.SRGBColorSpace;
     this.threeRenderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.threeRenderer.toneMappingExposure = 1.0;
     this.threeRenderer.shadowMap.enabled = true;
-    this.threeRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.threeRenderer.shadowMap.type = this.isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+
+    const gl = this.threeRenderer.getContext();
+    const hasFloatFBO = !!(
+      gl &&
+      (gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'))
+    );
+    this.useComposer = !this.isMobile && hasFloatFBO;
 
     // 2. Scene & Camera
     this.scene = new THREE.Scene();
@@ -126,7 +164,7 @@ export class RelativisticRenderer {
     this.camera.rotation.order = 'YXZ';
 
     // 3. Relativistic Sky Dome (follows observer every frame)
-    const skyGeo = new THREE.SphereGeometry(540.0, 48, 32);
+    const skyGeo = new THREE.SphereGeometry(540.0, this.isMobile ? 32 : 48, this.isMobile ? 20 : 32);
     this.skyMat = this.shaderSystem.createSkyMaterial(false);
     this.skyMesh = new THREE.Mesh(skyGeo, this.skyMat);
     this.skyMesh.frustumCulled = false;
@@ -138,7 +176,7 @@ export class RelativisticRenderer {
     this.pmremGenerator.compileEquirectangularShader();
     this.envScene = new THREE.Scene();
     const envSkyMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(80.0, 32, 20),
+      new THREE.SphereGeometry(80.0, 24, 16),
       this.shaderSystem.createSkyMaterial(true)
     );
     this.envScene.add(envSkyMesh);
@@ -149,16 +187,17 @@ export class RelativisticRenderer {
     // 5. Directional Sun / Moon Shadow Light + Hemisphere Fill
     this.sunLight = new THREE.DirectionalLight(0xfff6e8, 3.2);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.set(2048, 2048);
-    const dShadow = 92;
+    const shadowRes = this.isMobile ? 1024 : 2048;
+    this.sunLight.shadow.mapSize.set(shadowRes, shadowRes);
+    const dShadow = this.isMobile ? 76 : 92;
     this.sunLight.shadow.camera.left = -dShadow;
     this.sunLight.shadow.camera.right = dShadow;
     this.sunLight.shadow.camera.top = dShadow;
     this.sunLight.shadow.camera.bottom = -dShadow;
     this.sunLight.shadow.camera.near = 2.0;
-    this.sunLight.shadow.camera.far = 280.0;
-    this.sunLight.shadow.bias = -0.00035;
-    this.sunLight.shadow.normalBias = 0.04;
+    this.sunLight.shadow.camera.far = 260.0;
+    this.sunLight.shadow.bias = -0.00045;
+    this.sunLight.shadow.normalBias = 0.045;
     this.scene.add(this.sunLight);
     this.scene.add(this.sunLight.target);
 
@@ -170,32 +209,41 @@ export class RelativisticRenderer {
     this.bounceLight.position.set(-45, 32, -45);
     this.scene.add(this.bounceLight);
 
-    // 6. 4x MSAA HalfFloat Post-Processing Composer (Bloom + ACES + CAS Sharpening & Grade!)
-    const size = this.threeRenderer.getDrawingBufferSize(new THREE.Vector2());
-    const msaaTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
-      type: THREE.HalfFloatType,
-      colorSpace: THREE.LinearSRGBColorSpace,
-      samples: 4,
-    });
+    // 6. Desktop HDR Post-Processing Composer; on Mobile / non-Float-FBO GPUs, render direct
+    //    single-pass hardware ACES to avoid HalfFloat MSAA FBO failures & 160MB VRAM spikes!
+    this.composer = null;
+    this.bloomPass = null;
+    this.gradePass = null;
 
-    this.composer = new EffectComposer(this.threeRenderer, msaaTarget);
-    this.renderPass = new RenderPass(this.scene, this.camera);
-    this.composer.addPass(this.renderPass);
+    if (this.useComposer) {
+      const size = this.threeRenderer.getDrawingBufferSize(new THREE.Vector2());
+      const maxHwSamples = (gl && gl.getParameter(gl.MAX_SAMPLES)) || 0;
+      const targetSamples = Math.min(IS_FIREFOX_BROWSER ? 2 : 4, maxHwSamples);
+      const msaaTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
+        type: THREE.HalfFloatType,
+        colorSpace: THREE.LinearSRGBColorSpace,
+        samples: targetSamples,
+      });
 
-    this.bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(size.x, size.y),
-      0.16, // crisp controlled bloom strength
-      0.36, // bloom radius
-      1.52  // high HDR threshold so ONLY headlights, 632nm signals, sun & specular peaks bloom!
-    );
-    this.composer.addPass(this.bloomPass);
+      this.composer = new EffectComposer(this.threeRenderer, msaaTarget);
+      this.renderPass = new RenderPass(this.scene, this.camera);
+      this.composer.addPass(this.renderPass);
 
-    this.outputPass = new OutputPass();
-    this.composer.addPass(this.outputPass);
+      this.bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(size.x, size.y),
+        0.16,
+        0.36,
+        1.52
+      );
+      this.composer.addPass(this.bloomPass);
 
-    this.gradePass = new ShaderPass(ModernGameGradeShader);
-    this.gradePass.uniforms.uTexelSize.value.set(1.0 / Math.max(1, size.x), 1.0 / Math.max(1, size.y));
-    this.composer.addPass(this.gradePass);
+      this.outputPass = new OutputPass();
+      this.composer.addPass(this.outputPass);
+
+      this.gradePass = new ShaderPass(ModernGameGradeShader);
+      this.gradePass.uniforms.uTexelSize.value.set(1.0 / Math.max(1, size.x), 1.0 / Math.max(1, size.y));
+      this.composer.addPass(this.gradePass);
+    }
 
     this.currentExposure = 1.0;
     this.baseTodExposure = 1.0;
@@ -210,16 +258,20 @@ export class RelativisticRenderer {
   }
 
   _onResize() {
-    const w = window.innerWidth;
+    const w = Math.max(1, window.innerWidth);
     const h = Math.max(1, window.innerHeight);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    const maxDpr = this.isMobile ? 1.25 : 1.5;
+    this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
     this.threeRenderer.setSize(w, h, false);
-    const drawSize = this.threeRenderer.getDrawingBufferSize(new THREE.Vector2());
-    this.composer.setSize(drawSize.x, drawSize.y);
-    this.bloomPass.resolution.set(drawSize.x, drawSize.y);
-    if (this.gradePass) {
-      this.gradePass.uniforms.uTexelSize.value.set(1.0 / Math.max(1, drawSize.x), 1.0 / Math.max(1, drawSize.y));
+    if (this.composer) {
+      const drawSize = this.threeRenderer.getDrawingBufferSize(new THREE.Vector2());
+      this.composer.setSize(drawSize.x, drawSize.y);
+      if (this.bloomPass) this.bloomPass.resolution.set(drawSize.x, drawSize.y);
+      if (this.gradePass) {
+        this.gradePass.uniforms.uTexelSize.value.set(1.0 / Math.max(1, drawSize.x), 1.0 / Math.max(1, drawSize.y));
+      }
     }
   }
 
@@ -314,8 +366,10 @@ export class RelativisticRenderer {
 
     // Rebake HDR PMREM Cubemap Reflections so car clearcoat & skyscrapers reflect live Sunset/Day/Night!
     const nowMs = performance.now();
+    const minBakeIntervalMs = this.isMobile ? 2400.0 : 320.0;
+    const minTodStep = this.isMobile ? 1.15 : 0.42;
     const todDiff = Math.min(Math.abs(h - this.lastEnvBakedTod), 24.0 - Math.abs(h - this.lastEnvBakedTod));
-    if (forceEnvBake || (todDiff > 0.42 && nowMs - this.lastEnvBakeRealMs > 280.0)) {
+    if (!this.contextLost && (forceEnvBake || (todDiff > minTodStep && nowMs - this.lastEnvBakeRealMs > minBakeIntervalMs))) {
       this.lastEnvBakedTod = h;
       this.lastEnvBakeRealMs = nowMs;
       const nextEnv = this.pmremGenerator.fromScene(this.envScene, 0.015);
@@ -326,6 +380,7 @@ export class RelativisticRenderer {
   }
 
   renderFrame(observer, vehicle, entities, dtReal, dtCoord) {
+    if (this.contextLost) return;
     if (this.settings.autoDayCycle) {
       // 1 full 24h solar day per 80s of city coordinate time — accelerates visibly by Lorentz gamma!
       this.settings.timeOfDayHours = (this.settings.timeOfDayHours + (dtCoord / 80.0) * 24.0) % 24.0;
@@ -375,7 +430,11 @@ export class RelativisticRenderer {
     this.currentExposure += (targetExp - this.currentExposure) * Math.min(1.0, 5.0 * dtReal);
     this.threeRenderer.toneMappingExposure = this.currentExposure;
 
-    // 5. Render MSAA HDR Scene + Bloom + ACES Tone Mapping
-    this.composer.render(dtReal);
+    // 5. Render Scene (Desktop HDR MSAA Composer or Mobile Direct Single-Pass Hardware ACES)
+    if (this.composer) {
+      this.composer.render(dtReal);
+    } else {
+      this.threeRenderer.render(this.scene, this.camera);
+    }
   }
 }

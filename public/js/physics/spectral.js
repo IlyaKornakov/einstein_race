@@ -241,29 +241,37 @@ export function getSpectralGLSL() {
 
         float uvBlend = (1.0 - smoothstep(0.86, 1.00, D)) * uvWeight * reflEnergy;
         if (uvBlend > 1e-5) {
-          vec3 uvSum = 0.0095 * evalLobeLinearRGB(368.0, 34.0, D)
-                     + 0.0110 * evalLobeLinearRGB(292.0, 32.0, D)
-                     + 0.0125 * evalLobeLinearRGB(226.0, 28.0, D)
-                     + 0.0135 * evalLobeLinearRGB(172.0, 24.0, D)
-                     + 0.0145 * evalLobeLinearRGB(130.0, 20.0, D);
+          vec3 uvSum = 0.0155 * evalLobeLinearRGB(356.0, 44.0, D)
+                     + 0.0195 * evalLobeLinearRGB(244.0, 42.0, D)
+                     + 0.0235 * evalLobeLinearRGB(152.0, 32.0, D);
           shifted += uvBlend * uvSum * vec3(1.12, 0.94, 0.80);
         }
 
         float nirBlend = smoothstep(1.00, 1.14, D) * nirWeight * reflEnergy;
         if (nirBlend > 1e-5) {
-          vec3 nirSum = 0.0068 * evalLobeLinearRGB(735.0,  62.0,  D)
-                      + 0.0052 * evalLobeLinearRGB(920.0,  90.0,  D)
-                      + 0.0039 * evalLobeLinearRGB(1180.0, 125.0, D)
-                      + 0.0029 * evalLobeLinearRGB(1540.0, 170.0, D)
-                      + 0.0021 * evalLobeLinearRGB(2020.0, 230.0, D)
-                      + 0.0015 * evalLobeLinearRGB(2680.0, 310.0, D)
-                      + 0.0011 * evalLobeLinearRGB(3600.0, 420.0, D)
-                      + 0.0008 * evalLobeLinearRGB(4900.0, 580.0, D);
+          vec3 nirSum = 0.0095 * evalLobeLinearRGB(755.0,   78.0, D)
+                      + 0.0068 * evalLobeLinearRGB(1080.0, 130.0, D)
+                      + 0.0046 * evalLobeLinearRGB(1620.0, 210.0, D)
+                      + 0.0030 * evalLobeLinearRGB(2480.0, 340.0, D)
+                      + 0.0019 * evalLobeLinearRGB(3850.0, 540.0, D);
           vec3 blueTint = mix(vec3(0.92, 0.98, 1.10), vec3(0.68, 0.95, 1.38), smoothstep(1.25, 3.4, D));
           shifted += nirBlend * nirSum * blueTint;
         }
       }
 
+      return max(vec3(0.0), shifted * beamFactor);
+    }
+
+    vec3 applyRelativisticHazeSpectrum(vec3 restLinearRGB, float D_raw) {
+      float D = mix(1.0, D_raw, uEnableDoppler);
+      float beamD = mix(1.0, D_raw, uEnableBeaming);
+      float beamFactor = pow(clamp(beamD, 0.12, 12.0), 0.36);
+      if (abs(D - 1.0) < 1e-3) return max(vec3(0.0), restLinearRGB * beamFactor);
+      float clampedD = clamp(D, 0.58, 1.85);
+      vec3 w = uRgbToSpectralWeights * restLinearRGB;
+      vec3 shifted = w.x * evalLobeLinearRGB(612.0, 36.0, clampedD)
+                   + w.y * evalLobeLinearRGB(542.0, 32.0, clampedD)
+                   + w.z * evalLobeLinearRGB(454.0, 25.0, clampedD);
       return max(vec3(0.0), shifted * beamFactor);
     }
 

@@ -519,7 +519,7 @@ export function createTrackSystem(materials, shaderSystem) {
       };
       segments.push(seg);
 
-      const pad = Math.max(leftLimit, rightLimit) + 3.0;
+      const pad = (deckType === 'ground' ? 16.2 : Math.max(leftLimit, rightLimit)) + 3.0;
       const minCX = Math.floor((Math.min(ax, bx) - pad) / CELL_SIZE);
       const maxCX = Math.floor((Math.max(ax, bx) + pad) / CELL_SIZE);
       const minCZ = Math.floor((Math.min(az, bz) - pad) / CELL_SIZE);
@@ -570,6 +570,21 @@ export function createTrackSystem(materials, shaderSystem) {
       }
     }
     return { dist: Math.sqrt(bestD2), seg: bestSeg };
+  }
+
+  // Register low-clearance Skyway concrete ramp abutments (`0.85m <= f.pos.y < 3.15m`, where girder
+  // underside has <1.7m headroom) as height-gated solid OBBs: cars ON the ramp (`footY > f.pos.y - 0.85`)
+  // pass freely above `maxY`, while off-road grass cars (`footY = -0.08`) bounce cleanly off the abutment wall!
+  {
+    const sFrames = skywayData.frames;
+    for (let i = 2; i < sFrames.length - 2; i += 3) {
+      const sf = sFrames[i];
+      if (sf.s < 28.0 || sf.s > skywayData.totalLen - 28.0) continue;
+      if (sf.pos.y < 0.85 || sf.pos.y >= 3.15) continue;
+      if (minDistToRibbon2D(sf.pos.x, sf.pos.z, 'ground').dist < 9.4) continue;
+      const yaw = Math.atan2(sf.tan.x, -sf.tan.z);
+      registerSolidBox(sf.pos.x, sf.pos.z, 6.85, 2.25, yaw, sf.pos.y - 0.85);
+    }
   }
 
   // --- Build Concrete Viaduct Piers & Tokyo-Expressway Portal Straddle Bents ---
@@ -732,15 +747,20 @@ export function createTrackSystem(materials, shaderSystem) {
   }
 
   /**
-   * Queries exact multi-level support surface (Ground Loop, Skyway Overpass, Clock Plaza Stairs,
-   * Park Grass, Sand Trap, or Reflecting Lagoon Water) at `(x, footY, z)` in <0.02ms.
+   * Principled Two-Layer Support Surface Solver:
+   *   1. Unconditional Solid Ground Heightfield (`groundY`): combines Park Grass, Lagoons,
+   *      Clock Plaza & Stairs, AND the Ground Grand Prix Loop + its continuous `12.62->15.8m`
+   *      outer stone embankment WITHOUT any `footY` ceiling cutoff — solid earth has NO void
+   *      underneath, so a car can NEVER end up under a ground road, sidewalk, or plaza!
+   *   2. Elevated Viaduct Overpass (`skyway`): true hollow bridge deck supported on piers,
+   *      active when on the low merge apron (`deckY <= groundY + 1.05m`) or when above the
+   *      concrete box-girder underside (`footY >= deckY - 1.45m`).
    */
   function getSupportSurface(x, footY, z) {
-    let bestY = -0.08;
-    let bestBank = 0.0;
-    let bestDeck = 'ground_base';
-    let bestTerrain = 'grass';
-    let foundDeck = false;
+    let groundY = -0.08;
+    let groundBank = 0.0;
+    let groundDeck = 'ground_base';
+    let groundTerrain = 'grass';
 
     // 0. Check Infield Reflecting Lagoons & Sand Traps on base terrain
     for (let i = 0; i < lagoons.length; i++) {
@@ -749,41 +769,43 @@ export function createTrackSystem(materials, shaderSystem) {
       const dz = z - lg.cz;
       const dWater = (dx * dx) / (lg.waterRX * lg.waterRX) + (dz * dz) / (lg.waterRZ * lg.waterRZ);
       if (dWater <= 1.0) {
-        bestY = -0.11;
-        bestTerrain = 'water';
+        groundY = -0.11;
+        groundTerrain = 'water';
         break;
       }
       const dSand = (dx * dx) / (lg.sandRX * lg.sandRX) + (dz * dz) / (lg.sandRZ * lg.sandRZ);
       if (dSand <= 1.0) {
-        bestY = -0.068;
-        bestTerrain = 'sand';
+        groundY = -0.068;
+        groundTerrain = 'sand';
       }
     }
 
-    // 1. Check Clock Tower Plaza & Walkable Grand Stone Staircase (X in [-42..-11], Z in [-62..-14])
+    // 1. Check Clock Tower Plaza & Walkable Grand Stone Staircase (solid earth — never hollow!)
     if (x >= -42.5 && x <= -10.5 && z >= -62.5 && z <= -14.0) {
       let plazaY = 0.16;
-      // Walkable wide stone steps rising West from X = -19 (y=0.16) to X = -29 (y=2.80) for Z in [-48..-28]
-      if (z >= -52.0 && z <= -24.0) {
+      if (z >= -52.8 && z <= -23.2) {
         if (x <= -29.0 && x >= -41.5) {
-          plazaY = 2.80; // Raised Observation Terrace!
+          plazaY = 2.80; // Raised Observation Terrace
         } else if (x < -19.0 && x > -29.0) {
           const frac = (-19.0 - x) / 10.0;
           const stepIdx = Math.floor(frac * 14.0);
           plazaY = 0.16 + (stepIdx / 14.0) * 2.64;
         }
       }
-      if (plazaY <= footY + 1.35) {
-        bestY = plazaY;
-        bestDeck = 'plaza';
-        bestTerrain = 'plaza';
-        foundDeck = true;
+      if (plazaY > groundY) {
+        groundY = plazaY;
+        groundDeck = 'plaza';
+        groundTerrain = 'plaza';
       }
     }
 
-    // 2. Check Ground Grand Prix Loop & Multi-Level Skyway via Spatial Hash Grid
+    // 2. Scan Ground Grand Prix Loop (unconditional solid earth + sloped embankment!) & Elevated Skyway
     const cx = Math.floor(x / CELL_SIZE);
     const cz = Math.floor(z / CELL_SIZE);
+
+    let skyBestY = -Infinity;
+    let skyBestBank = 0.0;
+    let foundSkyway = false;
 
     for (let dx = -1; dx <= 1; dx++) {
       for (let dz = -1; dz <= 1; dz++) {
@@ -801,34 +823,67 @@ export function createTrackSystem(materials, shaderSystem) {
           const px = s.ax + abx * t;
           const pz = s.az + abz * t;
           const lat = (x - px) * s.rx + (z - pz) * s.rz;
+          const absLat = Math.abs(lat);
 
-          const maxW = s.deckType === 'skyway' ? 6.65 : 12.35;
-          if (Math.abs(lat) > maxW) continue;
+          if (s.deckType === 'ground') {
+            if (absLat > 15.8) continue;
+            const roadY = s.ay + (s.by - s.ay) * t - Math.sin(s.bank) * lat;
+            let segY = roadY;
+            let segTerrain = 'road';
+            let segBank = s.bank;
 
-          let deckY = s.ay + (s.by - s.ay) * t - Math.sin(s.bank) * lat;
-          let segTerrain = 'road';
+            if (absLat > 8.08) {
+              const isFlushRamp =
+                lat > 0 &&
+                Math.abs(px) < 13.0 &&
+                ((pz >= 8.0 && pz <= 72.0) || (pz >= 166.0 && pz <= 212.0));
+              const isPlazaEdge =
+                lat < 0 && Math.abs(px) < 10.5 && pz >= -60.0 && pz <= -18.0;
+              const curbH = isFlushRamp ? 0.005 : isPlazaEdge ? 0.04 : 0.15;
 
-          if (s.deckType === 'ground' && Math.abs(lat) > 8.08) {
-            const isFlushRamp =
-              (lat > 0 && Math.abs(px) < 13.0 && ((pz >= 8.0 && pz <= 72.0) || (pz >= 166.0 && pz <= 212.0)));
-            if (!isFlushRamp) {
-              deckY += 0.14;
-              segTerrain = 'sidewalk';
+              if (absLat <= 12.62) {
+                segY = roadY + (isFlushRamp ? 0.0 : curbH - 0.01);
+                segTerrain = isFlushRamp ? 'road' : 'sidewalk';
+              } else {
+                // Continuous sloped outer stone embankment (`12.62m -> 15.8m`) matching `buildSidewalkSide`!
+                const uSlope = (absLat - 12.62) / (15.8 - 12.62);
+                const topEmbankY = roadY + curbH - 0.05;
+                const botEmbankY = roadY - 2.55;
+                segY = topEmbankY + (botEmbankY - topEmbankY) * uSlope;
+                segTerrain = 'sidewalk';
+                segBank = 0.0;
+              }
             }
-          }
 
-          if (deckY <= footY + 1.45 && (!foundDeck || deckY > bestY)) {
-            bestY = deckY;
-            bestBank = s.bank;
-            bestDeck = s.deckType;
-            bestTerrain = segTerrain;
-            foundDeck = true;
+            if (segY > groundY) {
+              groundY = segY;
+              groundBank = segBank;
+              groundDeck = 'ground';
+              groundTerrain = segTerrain;
+            }
+          } else if (s.deckType === 'skyway') {
+            if (absLat > 6.65) continue;
+            const deckY = s.ay + (s.by - s.ay) * t - Math.sin(s.bank) * lat;
+            if (deckY > skyBestY) {
+              skyBestY = deckY;
+              skyBestBank = s.bank;
+              foundSkyway = true;
+            }
           }
         }
       }
     }
 
-    return { y: bestY, bank: bestBank, deck: bestDeck, terrain: bestTerrain };
+    // Activate Elevated Skyway if it merges near ground level OR car is above the viaduct girder underside
+    if (foundSkyway && skyBestY > groundY) {
+      const isLowMergeApron = skyBestY <= groundY + 1.05;
+      const isOnElevatedDeck = footY >= skyBestY - 1.45;
+      if (isLowMergeApron || isOnElevatedDeck) {
+        return { y: skyBestY, bank: skyBestBank, deck: 'skyway', terrain: 'road' };
+      }
+    }
+
+    return { y: groundY, bank: groundBank, deck: groundDeck, terrain: groundTerrain };
   }
 
   /**
