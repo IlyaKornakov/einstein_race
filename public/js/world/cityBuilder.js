@@ -19,7 +19,8 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { createTrackSystem } from './trackBuilder.js';
+import { createTrackSystem } from './trackBuilder.js?v=1.3';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=1.3';
 
 const _mat4 = new THREE.Matrix4();
 const _quat = new THREE.Quaternion();
@@ -95,9 +96,12 @@ function extractGLBMeshes(gltf, shaderSystem, {
     if (filterFn && !filterFn(child)) return;
 
     const g = child.geometry.clone();
-    // Strip unused Blender shape keys so static InstancedMesh never triggers WebGLMorphtargets!
+    // Strip unused Blender shape keys & explicit tangents so InstancedMesh uses minimal varyings & no morphs!
     g.morphAttributes = {};
     g.morphTargetsRelative = false;
+    if (g.attributes && g.attributes.tangent) {
+      g.deleteAttribute('tangent');
+    }
     g.applyMatrix4(child.matrixWorld);
     g.applyMatrix4(preMat);
     if (!g.getAttribute('uv1') && g.getAttribute('uv')) {
@@ -105,12 +109,32 @@ function extractGLBMeshes(gltf, shaderSystem, {
     }
 
     const srcMat = Array.isArray(child.material) ? child.material[0] : child.material;
-    const m = srcMat.clone();
+    let m = srcMat.clone();
     // Avoid expensive full-scene 2nd renderTransmissionPass on small clock/lamp glass panes
     if (m.transmission && m.transmission > 0) {
       m.transmission = 0;
       m.transparent = true;
       m.opacity = 0.35;
+    }
+    if (IS_MOBILE_DEVICE && m.isMeshPhysicalMaterial) {
+      m = new THREE.MeshStandardMaterial({
+        name: m.name,
+        color: m.color,
+        map: m.map,
+        normalMap: m.normalMap,
+        roughnessMap: m.roughnessMap,
+        metalnessMap: m.metalnessMap,
+        aoMap: m.aoMap,
+        emissive: m.emissive,
+        emissiveMap: m.emissiveMap,
+        emissiveIntensity: m.emissiveIntensity,
+        roughness: m.roughness,
+        metalness: m.metalness,
+        transparent: m.transparent,
+        opacity: m.opacity,
+        alphaTest: m.alphaTest,
+        side: m.side,
+      });
     }
     const matOpts = matOptsFn ? (matOptsFn(m, child) || {}) : {};
     shaderSystem.patchMaterial(m, shaderSystem.staticEntityUniforms, matOpts);
@@ -152,7 +176,8 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // Surrounding Park Lawn Ground Plane (with sculpted basins for the Infield Reflecting Lagoons!)
   {
-    const groundGeo = new THREE.PlaneGeometry(980, 980, 180, 180);
+    const parkSegs = IS_MOBILE_DEVICE ? 84 : 160;
+    const groundGeo = new THREE.PlaneGeometry(980, 980, parkSegs, parkSegs);
     groundGeo.rotateX(-Math.PI * 0.5);
     const pos = groundGeo.getAttribute('position');
     const uv = groundGeo.getAttribute('uv');
@@ -367,7 +392,7 @@ export function buildCityWorld(materials, shaderSystem) {
           const az = cz + rightZ * lx + fwdZ * (faceDist + 0.68);
           pushTransformed(awnBucket, makeSubdividedBox(2.55, 0.24, 1.25, 0.5, 1.4), ax, 3.22, az, faceYaw, 0.28, 0);
 
-          if (planterPoses.length < 34 && c === 0) {
+          if (!IS_MOBILE_DEVICE && planterPoses.length < 24 && c === 0) {
             const ppx = cx + rightX * (lx - 1.15) + fwdX * (faceDist + 0.58);
             const ppz = cz + rightZ * (lx - 1.15) + fwdZ * (faceDist + 0.58);
             const ppy = track.getSupportSurface(ppx, 1.0, ppz).y - 0.01;
@@ -1022,16 +1047,18 @@ export function buildCityWorld(materials, shaderSystem) {
   const tyrePoses = [];
   const conePoses = [];
 
-  for (let i = 0; i < frames.length; i += 10) {
+  const propFrameStep = IS_MOBILE_DEVICE ? 20 : 10;
+  for (let i = 0; i < frames.length; i += propFrameStep) {
     const f = frames[i];
     // Chicane tire stacks & cones on high-curvature outer shoulders!
-    if (Math.abs(f.signedCurv) > 0.010 && i % 10 === 0) {
+    if (Math.abs(f.signedCurv) > 0.010 && i % propFrameStep === 0) {
       const outSide = -Math.sign(f.signedCurv);
       const tx = f.pos.x + f.right.x * outSide * 8.65;
       const tz = f.pos.z + f.right.z * outSide * 8.65;
       const ty = track.getSupportSurface(tx, f.pos.y + 1.5, tz).y;
       if (track.minDistToRibbon2D(tx, tz, 'skyway').dist > 7.5) {
-        for (let stack = 0; stack < 3; stack++) {
+        const stackCount = IS_MOBILE_DEVICE ? 2 : 3;
+        for (let stack = 0; stack < stackCount; stack++) {
           tyrePoses.push({ x: tx, y: ty + 0.08 + stack * 0.17, z: tz, yaw: stack * 0.7, scale: 1.18 });
         }
         const cx = f.pos.x + f.right.x * outSide * 8.15;
@@ -1058,7 +1085,7 @@ export function buildCityWorld(materials, shaderSystem) {
       // Exact banked sidewalk / terrain surface elevation so zero trees or lamps EVER float on banked turns!
       const surfY = track.getSupportSurface(px, f.pos.y + 1.5, pz).y;
 
-      if (i % 20 === 0) {
+      if (i % (propFrameStep * 2) === 0) {
         const inwardYaw = Math.atan2(-f.right.x * side, f.right.z * side);
         lanternPoses.push({ x: px, y: surfY - 0.03, z: pz, yaw: inwardYaw });
       } else {
@@ -1197,16 +1224,16 @@ export function buildCityWorld(materials, shaderSystem) {
     addInstancedGLB(root, extractGLBMeshes(glbs.wallClock, shaderSystem), wallClockPoses, { castShadow: false });
 
     // 7. Chicane Rubber Tire Stacks (`old_tyre.glb`, rotated flat!) & Reflective Cones (`traffic_cone.glb`)
-    addInstancedGLB(root, extractGLBMeshes(glbs.oldTyre, shaderSystem, { rotX: Math.PI * 0.5 }), tyrePoses);
+    addInstancedGLB(root, extractGLBMeshes(glbs.oldTyre, shaderSystem, { rotX: Math.PI * 0.5 }), tyrePoses, { castShadow: false });
     const coneMeshes = extractGLBMeshes(glbs.trafficCone, shaderSystem, {
-      filterFn: (child) => (child.name || '').includes('Cone_Normal'),
+      filterFn: (child) => (child.name || '').includes('Cone_Normal') || (child.name || '').includes('ConeMesh'),
     });
-    addInstancedGLB(root, coneMeshes, conePoses);
+    addInstancedGLB(root, coneMeshes, conePoses, { castShadow: false });
 
     // 8. Sidewalk Potted Plants (`potted_plant.glb`) & Plaza Espresso Coffee Carts (`coffee_cart.glb`)
     addInstancedGLB(root, extractGLBMeshes(glbs.pottedPlant, shaderSystem, {
       matOptsFn: () => ({ nirWeight: 1.4 }),
-    }), planterPoses);
+    }), planterPoses, { castShadow: false });
 
     addInstancedGLB(root, extractGLBMeshes(glbs.coffeeCart, shaderSystem), [
       { x: -14.8, y: 0.16, z: -46.5, yaw: Math.PI * 0.5, scale: 1.05 },

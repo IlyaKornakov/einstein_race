@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { computeCalibratedSpectralMatrix, getSpectralGLSL } from '../physics/spectral.js';
+import { computeCalibratedSpectralMatrix, getSpectralGLSL } from '../physics/spectral.js?v=1.3';
 
 export class RelativisticShaderSystem {
   /**
@@ -515,6 +515,7 @@ export class RelativisticShaderSystem {
     castShadow = true,
     receiveShadow = true,
     materialOverrideFn = null,
+    forceStandardOnMobile = false,
   } = {}) {
     const clonedMap = new Map();
     root.traverse((obj) => {
@@ -522,6 +523,9 @@ export class RelativisticShaderSystem {
       if (!obj.isMesh) return;
       obj.castShadow = castShadow;
       obj.receiveShadow = receiveShadow;
+      if (obj.geometry && obj.geometry.attributes && obj.geometry.attributes.tangent) {
+        obj.geometry.deleteAttribute('tangent');
+      }
 
       const processMat = (origMat) => {
         if (!origMat) return origMat;
@@ -537,6 +541,27 @@ export class RelativisticShaderSystem {
           const res = materialOverrideFn(m, obj);
           if (res && res.material) m = res.material;
           if (res && res.matOpts) matOpts = res.matOpts;
+        }
+        // Convert remaining MeshPhysicalMaterials (e.g. GLB iridescence/clearcoat) to lean MeshStandardMaterial on mobile!
+        if (forceStandardOnMobile && m.isMeshPhysicalMaterial) {
+          m = new THREE.MeshStandardMaterial({
+            name: m.name,
+            color: m.color,
+            map: m.map,
+            normalMap: m.normalMap,
+            roughnessMap: m.roughnessMap,
+            metalnessMap: m.metalnessMap,
+            aoMap: m.aoMap,
+            emissive: m.emissive,
+            emissiveMap: m.emissiveMap,
+            emissiveIntensity: m.emissiveIntensity,
+            roughness: m.roughness,
+            metalness: m.metalness,
+            transparent: m.transparent,
+            opacity: m.opacity,
+            alphaTest: m.alphaTest,
+            side: m.side,
+          });
         }
         this.patchMaterial(m, entityUniforms, matOpts);
         clonedMap.set(origMat, m);

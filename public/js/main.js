@@ -2,15 +2,15 @@
  * Relativistic Grand Prix — Main Game Loop, Rest-Frame Radar & Twin-Paradox Race Manager
  */
 
-import { ObserverState, MinkowskiMetric } from './physics/spacetime.js';
-import { wavelengthToDisplaySRGB } from './physics/spectral.js';
-import { VehicleController } from './physics/vehicle.js';
-import { RelativisticShaderSystem } from './render/relativisticMaterial.js';
-import { buildPBRMaterialLibrary } from './render/textures.js';
-import { buildCityWorld } from './world/cityBuilder.js';
-import { EntityManager } from './world/entities.js';
-import { RelativisticRenderer } from './render/renderer.js';
-import { RelativisticAudioEngine } from './audio/relativisticAudio.js';
+import { ObserverState, MinkowskiMetric } from './physics/spacetime.js?v=1.3';
+import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=1.3';
+import { VehicleController } from './physics/vehicle.js?v=1.3';
+import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=1.3';
+import { buildPBRMaterialLibrary } from './render/textures.js?v=1.3';
+import { buildCityWorld } from './world/cityBuilder.js?v=1.3';
+import { EntityManager } from './world/entities.js?v=1.3';
+import { RelativisticRenderer } from './render/renderer.js?v=1.3';
+import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=1.3';
 
 function formatClock(seconds) {
   const s = Math.max(0, seconds);

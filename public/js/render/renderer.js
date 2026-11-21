@@ -143,8 +143,10 @@ export class RelativisticRenderer {
     this.threeRenderer.outputColorSpace = THREE.SRGBColorSpace;
     this.threeRenderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.threeRenderer.toneMappingExposure = 1.0;
-    this.threeRenderer.shadowMap.enabled = true;
-    this.threeRenderer.shadowMap.type = this.isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    // Disable full-scene shadow depth pass on mobile TBDR GPUs (cars already have relativistic
+    // contact shadows & facades have vertical uGroundAO — halves triangle binning & frees 1 varying!)
+    this.threeRenderer.shadowMap.enabled = !this.isMobile;
+    this.threeRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const gl = this.threeRenderer.getContext();
     const hasFloatFBO = !!(
@@ -186,7 +188,7 @@ export class RelativisticRenderer {
 
     // 5. Directional Sun / Moon Shadow Light + Hemisphere Fill
     this.sunLight = new THREE.DirectionalLight(0xfff6e8, 3.2);
-    this.sunLight.castShadow = true;
+    this.sunLight.castShadow = !this.isMobile;
     const shadowRes = this.isMobile ? 1024 : 2048;
     this.sunLight.shadow.mapSize.set(shadowRes, shadowRes);
     const dShadow = this.isMobile ? 76 : 92;
