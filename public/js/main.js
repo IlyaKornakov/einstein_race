@@ -2,15 +2,16 @@
  * Relativistic Grand Prix — Main Game Loop, Rest-Frame Radar & Twin-Paradox Race Manager
  */
 
-import { ObserverState, MinkowskiMetric } from './physics/spacetime.js?v=1.5';
-import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=1.5';
-import { VehicleController } from './physics/vehicle.js?v=1.5';
-import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=1.5';
-import { buildPBRMaterialLibrary } from './render/textures.js?v=1.5';
-import { buildCityWorld } from './world/cityBuilder.js?v=1.5';
-import { EntityManager } from './world/entities.js?v=1.5';
-import { RelativisticRenderer } from './render/renderer.js?v=1.5';
-import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=1.5';
+import { ObserverState, GeneralRelativityMetric } from './physics/spacetime.js?v=2.0';
+import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=2.0';
+import { VehicleController } from './physics/vehicle.js?v=2.0';
+import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=2.0';
+import { buildPBRMaterialLibrary } from './render/textures.js?v=2.0';
+import { buildCityWorld } from './world/cityBuilder.js?v=2.0';
+import { EntityManager } from './world/entities.js?v=2.0';
+import { GeneralRelativitySystem } from './world/generalRelativity.js?v=2.0';
+import { RelativisticRenderer } from './render/renderer.js?v=2.0';
+import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=2.0';
 
 function formatClock(seconds) {
   const s = Math.max(0, seconds);
@@ -40,7 +41,7 @@ function ordinalPlace(n) {
  *   dx' = dx - (1 - 1/gamma) * (dx . beta_hat) * beta_hat
  * and rotated so the viewer's gaze (`camYaw`) points UP!
  */
-function createRelativisticRadar(canvas, titleEl, toggleBtn, cityWorld) {
+function createRelativisticRadar(canvas, titleEl, toggleBtn, cityWorld, metric) {
   if (!canvas) return () => {};
   const ctx = canvas.getContext('2d');
   const W = canvas.width;
@@ -57,6 +58,7 @@ function createRelativisticRadar(canvas, titleEl, toggleBtn, cityWorld) {
   // Downsample track polylines slightly (every 2nd frame) for ~0.04ms crisp 60Hz Lorentz projection
   const groundPts = cityWorld.track.groundData.frames.filter((_, i) => i % 2 === 0).map((f) => [f.pos.x, f.pos.z]);
   const skywayPts = cityWorld.track.skywayData.frames.filter((_, i) => i % 2 === 0).map((f) => [f.pos.x, f.pos.z]);
+  const slingshotPts = (cityWorld.track.slingshotData?.frames || []).map((f) => [f.pos.x, f.pos.z]);
 
   // Bounds for static City-frame comparison mode
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -180,7 +182,44 @@ function createRelativisticRadar(canvas, titleEl, toggleBtn, cityWorld) {
     }
 
     strokePoly(groundPts, true, 'rgba(15, 23, 42, 0.95)', 7.5, 'rgba(226, 232, 240, 0.80)', 3.6);
+    if (slingshotPts.length > 0 && metric?.enableGR) {
+      strokePoly(slingshotPts, false, 'rgba(59, 7, 100, 0.95)', 5.2, '#c084fc', 2.4);
+    }
     strokePoly(skywayPts, false, 'rgba(8, 47, 73, 0.95)', 6.0, '#38bdf8', 2.8);
+
+    // Draw General Relativity Landmarks: Black Hole Singularity & Wormhole Shortcut (A <-> B)
+    if (metric?.enableGR) {
+      const [wAx, wAy] = projectPt(metric.wormholeA[0], metric.wormholeA[2]);
+      const [wBx, wBy] = projectPt(metric.wormholeB[0], metric.wormholeB[2]);
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.55)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(wAx, wAy);
+      ctx.lineTo(wBx, wBy);
+      ctx.stroke();
+      ctx.restore();
+
+      for (const [wx, wy] of [[wAx, wAy], [wBx, wBy]]) {
+        ctx.strokeStyle = '#22d3ee';
+        ctx.fillStyle = 'rgba(8, 51, 68, 0.95)';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.arc(wx, wy, 4.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      const [bhX, bhY] = projectPt(metric.bhPos[0], metric.bhPos[2]);
+      ctx.strokeStyle = '#f97316';
+      ctx.fillStyle = '#000000';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(bhX, bhY, 5.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
 
     // Start / Finish Chequered Line Bar at Z = +94, X in [-8..+8]
     const [sfLx, sfLy] = projectPt(-8.5, 94.0);
@@ -246,31 +285,62 @@ async function init() {
     if (loadingStatus) loadingStatus.textContent = msg;
   };
 
-  setProgress(10, 'Initializing Minkowski spacetime metric & rigid-body physics…');
+  setProgress(10, 'Initializing General Relativity curved spacetime metric & physics…');
   await new Promise((r) => requestAnimationFrame(r));
 
-  const metric = new MinkowskiMetric(25.0);
+  const metric = new GeneralRelativityMetric(25.0);
   const observer = new ObserverState();
   const vehicle = new VehicleController(observer, metric);
   const shaderSystem = new RelativisticShaderSystem(metric);
   const renderer = new RelativisticRenderer(canvas, metric, shaderSystem);
 
-  setProgress(26, 'Loading 1024px photorealistic PBR textures & ORM maps…');
+  setProgress(26, 'Loading photorealistic PBR textures & ORM maps…');
   await new Promise((r) => requestAnimationFrame(r));
   const materials = await buildPBRMaterialLibrary(renderer.threeRenderer, shaderSystem);
 
-  setProgress(44, 'Constructing Grand Prix spline circuit, Skyway & relativistic landmarks…');
+  setProgress(44, 'Constructing Grand Prix circuit, Skyway, Black Hole & Wormhole…');
   await new Promise((r) => requestAnimationFrame(r));
   const cityWorld = buildCityWorld(materials, shaderSystem);
   renderer.attachWorld(materials, cityWorld);
 
+  const grSystem = new GeneralRelativitySystem(
+    renderer.scene,
+    renderer.threeRenderer,
+    metric,
+    shaderSystem,
+    materials,
+    cityWorld.track
+  );
+
   setProgress(58, 'Loading SpeedTree foliage, glTF supercars, statues & rigged humans…');
   const entities = new EntityManager(renderer.scene, cityWorld, metric, shaderSystem);
   await entities.loadAssets((frac, key) => {
-    setProgress(Math.round(58 + frac * 38), `Loading 3D asset: ${key}…`);
+    setProgress(Math.round(58 + frac * 36), `Loading 3D asset: ${key}…`);
   });
 
+  // Bake live 3D destination cubemaps for Morris–Thorne Wormhole Mouths A & B!
+  setProgress(95, 'Synthesizing Morris–Thorne wormhole panoramas & Kerr geodesics…');
+  await new Promise((r) => requestAnimationFrame(r));
+  grSystem.bakeWormholePortals(observer);
+
   const audio = new RelativisticAudioEngine(metric, cityWorld);
+  const grBanner = document.getElementById('grEventBanner');
+  let grBannerTimer = null;
+  const flashGRBanner = (text) => {
+    if (!grBanner) return;
+    grBanner.textContent = text;
+    grBanner.classList.remove('hidden');
+    if (grBannerTimer) clearTimeout(grBannerTimer);
+    grBannerTimer = setTimeout(() => grBanner.classList.add('hidden'), 2200);
+  };
+  grSystem.onWormholeTraverse = () => {
+    audio.triggerWormholeWarp();
+    flashGRBanner('◎ EINSTEIN–ROSEN WORMHOLE TRAVERSED!');
+  };
+  grSystem.onHorizonReset = () => {
+    audio.triggerCollision(0.95);
+    flashGRBanner('● EVENT HORIZON CROSSED • TIDAL EJECTION');
+  };
 
   vehicle.getSupportSurface = cityWorld.getSupportSurface;
   vehicle.queryBarrierContact = cityWorld.queryBarrierContact;
@@ -357,7 +427,8 @@ async function init() {
     document.getElementById('minimapCanvas'),
     document.getElementById('minimapTitle'),
     document.getElementById('btnToggleMapFrame'),
-    cityWorld
+    cityWorld,
+    metric
   );
 
   // Staggered GPU shader compilation & warmup so mobile GPU watchdogs never time out
@@ -382,6 +453,7 @@ async function init() {
     entities,
     renderer,
     cityWorld,
+    grSystem,
     shaderSystem,
     audio,
     raceState,
@@ -421,7 +493,7 @@ async function init() {
     document.getElementById('finishProperTime').textContent = formatClock(raceState.playerFinishProper);
     document.getElementById('finishCityTime').textContent = formatClock(raceState.playerFinishCoord);
     const saved = Math.max(0.0, raceState.playerFinishCoord - raceState.playerFinishProper);
-    document.getElementById('finishTimeSaved').textContent = `${saved.toFixed(2)}s younger via Lorentz γ!`;
+    document.getElementById('finishTimeSaved').textContent = `${saved.toFixed(2)}s younger (SR + GR)!`;
 
     const listEl = document.getElementById('finishStandings');
     if (listEl) {
@@ -464,6 +536,7 @@ async function init() {
 
     const prevCoordTime = observer.event[0];
     const prevCarZ = vehicle.carZ;
+    grSystem.update(dtReal, observer, vehicle, renderer.settings.timeOfDayHours);
     vehicle.update(dtReal);
     const dtCoord = observer.event[0] - prevCoordTime;
 
@@ -475,8 +548,8 @@ async function init() {
     renderRadar(observer, vehicle, entities);
     audio.update(dtReal, observer, vehicle, entities, renderer.settings);
 
-    // Check Player Lap Progression across Start/Finish (Z = +94)
-    if (!raceState.playerHasCrossedStart && vehicle.footY < 2.5 && Math.abs(vehicle.carX) < 12.5 && prevCarZ > 94.0 && vehicle.carZ <= 94.0) {
+    // Check Player Lap Progression across Start/Finish (Z = +94, including Black Hole Slingshot Bypass lane!)
+    if (!raceState.playerHasCrossedStart && vehicle.footY < 2.5 && vehicle.carX > -17.5 && vehicle.carX < 12.5 && prevCarZ > 94.0 && vehicle.carZ <= 94.0) {
       raceState.playerHasCrossedStart = true;
     }
     if (vehicle.carZ < -35.0 || vehicle.footY > 8.0) {
@@ -487,7 +560,8 @@ async function init() {
       raceState.mode === 'racing' &&
       raceState.playerPassedMidpoint &&
       vehicle.footY < 2.5 &&
-      Math.abs(vehicle.carX) < 12.5 &&
+      vehicle.carX > -17.5 &&
+      vehicle.carX < 12.5 &&
       prevCarZ > 94.0 &&
       vehicle.carZ <= 94.0
     ) {
@@ -581,10 +655,20 @@ async function init() {
         elTerrainBadge.classList.add('hidden');
       }
     }
+    const elGravBadge = document.getElementById('gravBadge');
+    if (elGravBadge) {
+      const gAlpha = observer.gravAlpha ?? 1.0;
+      if (metric.enableGR && gAlpha < 0.965) {
+        elGravBadge.textContent = `GR ${(1.0 / gAlpha).toFixed(2)}×`;
+        elGravBadge.classList.remove('hidden');
+      } else {
+        elGravBadge.classList.add('hidden');
+      }
+    }
     elBetaBar.style.width = `${Math.min(100, betaMag * 100).toFixed(1)}%`;
     if (elBoostFill) elBoostFill.style.width = `${Math.round(vehicle.boostEnergy * 100)}%`;
     elMps.textContent = (betaMag * metric.c).toFixed(1);
-    elGamma.textContent = observer.gamma.toFixed(3);
+    elGamma.textContent = (observer.totalTimeDilation || observer.gamma).toFixed(3);
     if (elAlt) elAlt.textContent = `${Math.max(0, vehicle.footY).toFixed(1)}m`;
     if (elGForce) elGForce.textContent = `${Math.hypot(vehicle.properLongG, vehicle.properLatG).toFixed(1)}g`;
 
@@ -688,12 +772,25 @@ function bindUI(metric, vehicle, entities, renderer, audio, startNewGrandPrix, r
       renderer.settings[key] = el.checked;
     });
   };
+  bindCheck('chkGeneralRel', 'enableGR');
   bindCheck('chkRetardation', 'enableRetardation');
   bindCheck('chkLorentz', 'enableLorentz');
   bindCheck('chkAberration', 'enableAberration');
   bindCheck('chkDoppler', 'enableDoppler');
   bindCheck('chkBeaming', 'enableBeaming');
   bindCheck('chkAccelEquiv', 'enableAccelEquiv');
+
+  document.getElementById('btnJumpBH')?.addEventListener('click', () => {
+    vehicle.teleportTo(-13.8, 0.03, 86.0, -0.32);
+    physicsDrawer?.classList.add('hidden');
+    togglePhysicsBtn?.classList.remove('active');
+  });
+
+  document.getElementById('btnJumpWormhole')?.addEventListener('click', () => {
+    vehicle.teleportTo(-2.2, 0.02, -116.0, -0.082);
+    physicsDrawer?.classList.add('hidden');
+    togglePhysicsBtn?.classList.remove('active');
+  });
 
   document.getElementById('btnNewRace')?.addEventListener('click', () => {
     startNewGrandPrix(true);

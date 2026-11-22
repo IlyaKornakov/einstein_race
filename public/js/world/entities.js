@@ -19,7 +19,7 @@ import { GLTFLoader } from '../../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../../vendor/DRACOLoader.js';
 import { clone as cloneSkeleton } from '../../vendor/SkeletonUtils.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=1.5';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.0';
 
 /**
  * Merges static child submeshes sharing identical Material & vertex attribute layout inside a
@@ -312,32 +312,32 @@ export class EntityManager {
       });
 
     const manifest = [
-      ['ferrari', './assets/models/ferrari.glb?v=1.5'],
-      ['concept', './assets/models/CarConcept.glb?v=1.5'],
-      ['truck', './assets/models/CesiumMilkTruck.glb?v=1.5'],
-      ['soldier', './assets/models/Soldier.glb?v=1.5'],
-      ['cesiumMan', './assets/models/CesiumMan.glb?v=1.5'],
-      ['hvGirl', './assets/models/HVGirl.glb?v=1.5'],
-      ['broadleafTree', './assets/models/broadleaf_tree.glb?v=1.5'],
-      ['quiverTree', './assets/models/quiver_tree.glb?v=1.5'],
-      ['lantern', './assets/models/Lantern.glb?v=1.5'],
-      ['streetLampModern', './assets/models/street_lamp_modern.glb?v=1.5'],
-      ['gothicStatue', './assets/models/gothic_statue.glb?v=1.5'],
-      ['marbleBust', './assets/models/marble_bust.glb?v=1.5'],
-      ['horseStatue', './assets/models/horse_statue.glb?v=1.5'],
-      ['wallClock', './assets/models/wall_clock.glb?v=1.5'],
-      ['oldTyre', './assets/models/old_tyre.glb?v=1.5'],
-      ['trafficCone', './assets/models/traffic_cone.glb?v=1.5'],
-      ['pottedPlant', './assets/models/potted_plant.glb?v=1.5'],
-      ['coffeeCart', './assets/models/coffee_cart.glb?v=1.5'],
+      ['ferrari', './assets/models/ferrari.glb?v=2.0'],
+      ['concept', './assets/models/CarConcept.glb?v=2.0'],
+      ['truck', './assets/models/CesiumMilkTruck.glb?v=2.0'],
+      ['soldier', './assets/models/Soldier.glb?v=2.0'],
+      ['cesiumMan', './assets/models/CesiumMan.glb?v=2.0'],
+      ['hvGirl', './assets/models/HVGirl.glb?v=2.0'],
+      ['broadleafTree', './assets/models/broadleaf_tree.glb?v=2.0'],
+      ['quiverTree', './assets/models/quiver_tree.glb?v=2.0'],
+      ['lantern', './assets/models/Lantern.glb?v=2.0'],
+      ['streetLampModern', './assets/models/street_lamp_modern.glb?v=2.0'],
+      ['gothicStatue', './assets/models/gothic_statue.glb?v=2.0'],
+      ['marbleBust', './assets/models/marble_bust.glb?v=2.0'],
+      ['horseStatue', './assets/models/horse_statue.glb?v=2.0'],
+      ['wallClock', './assets/models/wall_clock.glb?v=2.0'],
+      ['oldTyre', './assets/models/old_tyre.glb?v=2.0'],
+      ['trafficCone', './assets/models/traffic_cone.glb?v=2.0'],
+      ['pottedPlant', './assets/models/potted_plant.glb?v=2.0'],
+      ['coffeeCart', './assets/models/coffee_cart.glb?v=2.0'],
       ...(IS_MOBILE_DEVICE
         ? []
         : [
-            ['xbot', './assets/models/Xbot.glb?v=1.5'],
-            ['michelle', './assets/models/Michelle.glb?v=1.5'],
-            ['flamingo', './assets/models/Flamingo.glb?v=1.5'],
-            ['stork', './assets/models/Stork.glb?v=1.5'],
-            ['horse', './assets/models/Horse.glb?v=1.5'],
+            ['xbot', './assets/models/Xbot.glb?v=2.0'],
+            ['michelle', './assets/models/Michelle.glb?v=2.0'],
+            ['flamingo', './assets/models/Flamingo.glb?v=2.0'],
+            ['stork', './assets/models/Stork.glb?v=2.0'],
+            ['horse', './assets/models/Horse.glb?v=2.0'],
           ]),
     ];
 

@@ -8,7 +8,7 @@
  */
 
 import * as THREE from 'three';
-import { IS_MOBILE_DEVICE } from './renderer.js?v=1.5';
+import { IS_MOBILE_DEVICE } from './renderer.js?v=2.0';
 
 function makeCanvasTexture(width, height, drawFn, { srgb = true, repeat = true, aniso = 8 } = {}) {
   const scale = IS_MOBILE_DEVICE ? 0.5 : 1.0;

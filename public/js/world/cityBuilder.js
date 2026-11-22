@@ -19,8 +19,8 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { createTrackSystem } from './trackBuilder.js?v=1.5';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=1.5';
+import { createTrackSystem } from './trackBuilder.js?v=2.0';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.0';
 
 const _mat4 = new THREE.Matrix4();
 const _quat = new THREE.Quaternion();
@@ -286,6 +286,17 @@ export function buildCityWorld(materials, shaderSystem) {
   };
 
   function isFootprintClear(cx, cz, radius) {
+    // Keep Black Hole Singularity Basin & Slingshot Bypass Loop clear!
+    if (cx > -66.0 - radius && cx < -4.0 + radius && cz > 0.0 - radius && cz < 114.0 + radius) {
+      return false;
+    }
+    // Keep Morris–Thorne Wormhole Mouth A (-5, -150) & Mouth B (201, 54) clear!
+    if (Math.hypot(cx - (-5.0), cz - (-150.0)) < 19.0 + radius) {
+      return false;
+    }
+    if (Math.hypot(cx - 201.0, cz - 54.0) < 19.0 + radius) {
+      return false;
+    }
     // Keep Clock Tower Plaza open
     if (cx > -46.0 - radius && cx < -8.0 + radius && cz > -66.0 - radius && cz < -12.0 + radius) {
       return false;
@@ -645,15 +656,15 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // --- 5. Grand Prix Chequered Start / Finish Timing Gantry (Z = +94) + 845nm Infrared Speed Gates! ---
   {
-    // Start / Finish Gantry at Z = +94.0
+    // Start / Finish Gantry at Z = +94.0 (widened West post to -17.4 so Black Hole Slingshot Bypass is 100% clear!)
     const sfZ = 94.0;
-    for (const sx of [-10.2, 10.2]) {
+    for (const sx of [-17.4, 10.2]) {
       track.registerSolidCylinder(sx, sfZ, 0.36, 7.6);
       const col = new THREE.CylinderGeometry(0.28, 0.34, 7.6, 10, 4);
       col.setAttribute('uv1', col.getAttribute('uv'));
       pushTransformed(buckets.brushedSteel, col, sx, 3.8, sfZ);
     }
-    pushTransformed(buckets.darkIron, makeSubdividedBox(21.2, 0.55, 0.55, 0.4, 1.5), 0.0, 7.2, sfZ);
+    pushTransformed(buckets.darkIron, makeSubdividedBox(28.4, 0.55, 0.55, 0.4, 1.5), -3.6, 7.2, sfZ);
 
     const banner = new THREE.Mesh(new THREE.BoxGeometry(14.5, 2.4, 0.22, 18, 4, 1), materials.signStartFinish);
     banner.position.set(0.0, 6.95, sfZ + 0.25);
@@ -670,15 +681,15 @@ export function buildCityWorld(materials, shaderSystem) {
       pushTransformed(buckets.signalGreen525, gLens, lx, 4.95, sfZ + 0.24);
     }
 
-    // 845nm Invisible-at-Rest Near-Infrared Relativistic Speed Gate at Z = +2.0 (Grand Boulevard)!
+    // 845nm Invisible-at-Rest Near-Infrared Relativistic Speed Gate at Z = +2.0 (widened West post for Slingshot merge!)
     const irZ = 2.0;
-    for (const sx of [-10.0, 10.0]) {
+    for (const sx of [-13.6, 10.0]) {
       track.registerSolidCylinder(sx, irZ, 0.32, 7.2);
       const col = new THREE.CylinderGeometry(0.24, 0.30, 7.2, 10, 4);
       col.setAttribute('uv1', col.getAttribute('uv'));
       pushTransformed(buckets.darkIron, col, sx, 3.6, irZ);
     }
-    pushTransformed(buckets.darkIron, makeSubdividedBox(20.6, 0.45, 0.45, 0.4, 1.5), 0.0, 6.8, irZ);
+    pushTransformed(buckets.darkIron, makeSubdividedBox(24.2, 0.45, 0.45, 0.4, 1.5), -1.8, 6.8, irZ);
     const irSign = new THREE.Mesh(new THREE.BoxGeometry(12.6, 2.0, 0.20, 16, 4, 1), materials.signIRDetector);
     irSign.position.set(0.0, 6.85, irZ + 0.22);
     irSign.frustumCulled = false;
@@ -843,7 +854,7 @@ export function buildCityWorld(materials, shaderSystem) {
     const f = frames[i];
     const side = (i % 132 === 24) ? -1 : 1;
     if (side > 0 && Math.abs(f.pos.x) < 12.0 && ((f.pos.z >= 6.0 && f.pos.z <= 72.0) || (f.pos.z >= 166.0 && f.pos.z <= 214.0))) continue;
-    if (side < 0 && Math.abs(f.pos.x) < 10.0 && f.pos.z >= -60.0 && f.pos.z <= -18.0) continue;
+    if (side < 0 && Math.abs(f.pos.x) < 12.0 && ((f.pos.z >= -60.0 && f.pos.z <= -18.0) || (f.pos.z >= 2.0 && f.pos.z <= 114.0))) continue;
 
     const px = f.pos.x + f.right.x * side * 9.5;
     const pz = f.pos.z + f.right.z * side * 9.5;
@@ -903,11 +914,10 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // Place Classical Terrell-Rotation Statue & Marble Bust Pedestals along Grand Boulevard & Sweeper!
   const colonnadeSpots = [
-    [-9.6, 136.0, Math.PI * 0.5, 'statue'],
+    [-9.6, 148.0, Math.PI * 0.5, 'statue'],
     [9.6, 136.0, -Math.PI * 0.5, 'bust'],
-    [-9.6, 108.0, Math.PI * 0.5, 'statue'],
+    [-9.6, 122.0, Math.PI * 0.5, 'statue'],
     [9.6, 108.0, -Math.PI * 0.5, 'bust'],
-    [-9.6, 78.0, Math.PI * 0.5, 'bust'],
     [9.6, 78.0, -Math.PI * 0.5, 'statue'],
     [-9.6, -4.0, Math.PI * 0.5, 'statue'],
     [-9.6, -68.0, Math.PI * 0.5, 'bust'],
@@ -946,14 +956,16 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // --- 10. Monochromatic Spectral Traffic Signal Gantries (Z = +12, -48) ---
   for (const gz of [12.0, -48.0]) {
-    const postX = 9.4, barY = 5.85;
-    for (const sx of [-postX, postX]) {
+    const leftPostX = gz > 0.0 ? -16.8 : -9.4;
+    const rightPostX = 9.4;
+    const barY = 5.85;
+    for (const sx of [leftPostX, rightPostX]) {
       track.registerSolidCylinder(sx, gz, 0.24, barY);
       const pGeo = new THREE.CylinderGeometry(0.16, 0.20, barY + 0.4, 8, 4);
       pGeo.setAttribute('uv1', pGeo.getAttribute('uv'));
       pushTransformed(buckets.darkIron, pGeo, sx, (barY + 0.4) * 0.5, gz);
     }
-    pushTransformed(buckets.darkIron, makeSubdividedBox(postX * 2.0, 0.22, 0.22, 0.5, 1.4), 0.0, barY, gz);
+    pushTransformed(buckets.darkIron, makeSubdividedBox(rightPostX - leftPostX, 0.22, 0.22, 0.5, 1.4), 0.5 * (leftPostX + rightPostX), barY, gz);
     for (const headX of [-3.8, 3.8]) {
       pushTransformed(buckets.darkIron, makeSubdividedBox(0.58, 1.52, 0.38, 0.5, 1.0), headX, barY - 0.35, gz);
       for (const [bkt, dy] of [
@@ -974,11 +986,11 @@ export function buildCityWorld(materials, shaderSystem) {
   {
     const billboardSpecs = [
       // [cx, baseY, cz, rotY, isTerrellGrid]
-      [-11.8, 0.0, 82.0, 0.38, true],
+      [12.4, 0.0, 128.0, -0.36, true],
       [13.6, 0.0, 52.0, -0.36, false],
-      [-11.8, 0.0, 26.0, 0.42, true],
+      [-28.5, 0.0, 18.0, 0.48, true],
       [12.4, 0.0, -36.0, -0.40, false],
-      [-11.8, 0.0, -108.0, 0.36, true],
+      [-12.8, 0.0, -108.0, 0.36, true],
       [152.0, 0.9, -212.0, -0.78, false],
       [230.0, 1.2, 48.0, -1.52, true],
       [33.2, 13.8, -52.0, -0.42, true], // Elevated Skyway Panorama Billboard!
@@ -1072,7 +1084,13 @@ export function buildCityWorld(materials, shaderSystem) {
       if (side > 0 && Math.abs(f.pos.x) < 12.5 && ((f.pos.z >= 6.0 && f.pos.z <= 72.0) || (f.pos.z >= 166.0 && f.pos.z <= 214.0))) {
         continue;
       }
-      if (side < 0 && Math.abs(f.pos.x) < 10.5 && f.pos.z >= -60.0 && f.pos.z <= -18.0) {
+      if (side < 0 && Math.abs(f.pos.x) < 12.5 && ((f.pos.z >= -60.0 && f.pos.z <= -18.0) || (f.pos.z >= 2.0 && f.pos.z <= 138.0))) {
+        continue;
+      }
+      if (Math.abs(f.pos.x) < 15.0 && f.pos.z >= -162.0 && f.pos.z <= -120.0) {
+        continue;
+      }
+      if (Math.hypot(f.pos.x - 201.0, f.pos.z - 54.0) < 26.0) {
         continue;
       }
 

@@ -219,8 +219,18 @@ export function createTrackSystem(materials, shaderSystem) {
         }
       }
       // Flush / gentle curb at Clock Tower Plaza West (-1) entrance (Z in [-60..-18])
-      if (sideSign < 0 && Math.abs(x) < 10.0 && z >= -60.0 && z <= -18.0) {
-        curbH = 0.04;
+      // AND at the Black Hole Slingshot Bypass Lane West (-1) entrance/exit (Z in [4..112])!
+      if (sideSign < 0 && Math.abs(x) < 10.5) {
+        if (z >= -60.0 && z <= -18.0) curbH = 0.04;
+        if (z >= 4.0 && z <= 112.0) curbH = 0.005;
+      }
+      // Flush curb at North Boulevard Wormhole Mouth A approach (Z in [-156..-122])
+      // and East Skyline Wormhole Mouth B merge (X > 185, Z in [34..94])
+      if (Math.abs(x) < 14.0 && z >= -156.0 && z <= -122.0) {
+        curbH = 0.005;
+      }
+      if (sideSign > 0 && x > 185.0 && z >= 34.0 && z <= 94.0) {
+        curbH = 0.005;
       }
 
       const lats = sideSign > 0
@@ -539,8 +549,81 @@ export function createTrackSystem(materials, shaderSystem) {
     }
   };
 
+  // --- Build General Relativity Paved Slingshot Bypass Loop & Wormhole Approach Pads (v2.0) ---
+  const slingshotCurve = new THREE.CatmullRomCurve3(
+    [
+      new THREE.Vector3(-4.8, 0.015, 108.0),
+      new THREE.Vector3(-14.5, 0.02, 84.0),
+      new THREE.Vector3(-20.2, 0.02, 54.0), // Periapsis ~15m from Black Hole (-34, 6.2, 54)!
+      new THREE.Vector3(-14.5, 0.02, 24.0),
+      new THREE.Vector3(-4.8, 0.015, 4.0),
+    ],
+    false,
+    'centripetal',
+    0.5
+  );
+  const slingshotData = sampleRibbonFrames(slingshotCurve, 1.4, false, 1.35);
+  {
+    const slProf = [
+      [-5.2, 0.02, 0.0, 0, 1],
+      [-2.6, 0.04, 0.25, 0, 1],
+      [0.0, 0.05, 0.5, 0, 1],
+      [2.6, 0.04, 0.75, 0, 1],
+      [5.2, 0.02, 1.0, 0, 1],
+    ];
+    const slMesh = new THREE.Mesh(
+      buildProfileStripGeometry(slingshotData.frames, slProf, 0.065),
+      materials.highwayRoad
+    );
+    slMesh.receiveShadow = true;
+    slMesh.frustumCulled = false;
+    group.add(slMesh);
+  }
+
+  const wormholeACurve = new THREE.CatmullRomCurve3(
+    [
+      new THREE.Vector3(-1.5, 0.015, -124.0),
+      new THREE.Vector3(-3.8, 0.02, -138.0),
+      new THREE.Vector3(-5.0, 0.02, -158.0),
+    ],
+    false,
+    'centripetal',
+    0.5
+  );
+  const wormholeAData = sampleRibbonFrames(wormholeACurve, 1.5, false, 0.0);
+
+  const wormholeBCurve = new THREE.CatmullRomCurve3(
+    [
+      new THREE.Vector3(200.5, 1.18, 44.0),
+      new THREE.Vector3(203.5, 1.05, 62.0),
+      new THREE.Vector3(211.5, 0.78, 86.0),
+    ],
+    false,
+    'centripetal',
+    0.5
+  );
+  const wormholeBData = sampleRibbonFrames(wormholeBCurve, 1.5, false, 0.0);
+
+  for (const wData of [wormholeAData, wormholeBData]) {
+    const wpProf = [
+      [-5.6, 0.02, 0.0, 0, 1],
+      [0.0, 0.04, 0.5, 0, 1],
+      [5.6, 0.02, 1.0, 0, 1],
+    ];
+    const wpMesh = new THREE.Mesh(
+      buildProfileStripGeometry(wData.frames, wpProf, 0.065),
+      materials.highwayRoad
+    );
+    wpMesh.receiveShadow = true;
+    wpMesh.frustumCulled = false;
+    group.add(wpMesh);
+  }
+
   registerRibbonSegments(groundData, 'ground');
   registerRibbonSegments(skywayData, 'skyway');
+  registerRibbonSegments(slingshotData, 'slingshot');
+  registerRibbonSegments(wormholeAData, 'wormhole_pad');
+  registerRibbonSegments(wormholeBData, 'wormhole_pad');
 
   // Helper to check distance to Ground Loop centerline (used so Skyway piers & buildings never block roads!)
   function minDistToRibbon2D(x, z, targetDeck = null) {
@@ -834,9 +917,12 @@ export function createTrackSystem(materials, shaderSystem) {
 
             if (absLat > 8.08) {
               const isFlushRamp =
-                lat > 0 &&
-                Math.abs(px) < 13.0 &&
-                ((pz >= 8.0 && pz <= 72.0) || (pz >= 166.0 && pz <= 212.0));
+                (lat > 0 &&
+                  Math.abs(px) < 13.0 &&
+                  ((pz >= 8.0 && pz <= 72.0) || (pz >= 166.0 && pz <= 212.0))) ||
+                (lat > 0 && px > 185.0 && pz >= 34.0 && pz <= 94.0) ||
+                (lat < 0 && Math.abs(px) < 12.0 && pz >= 4.0 && pz <= 112.0) ||
+                (Math.abs(px) < 14.0 && pz >= -156.0 && pz <= -122.0);
               const isPlazaEdge =
                 lat < 0 && Math.abs(px) < 10.5 && pz >= -60.0 && pz <= -18.0;
               const curbH = isFlushRamp ? 0.005 : isPlazaEdge ? 0.04 : 0.15;
@@ -860,6 +946,16 @@ export function createTrackSystem(materials, shaderSystem) {
               groundBank = segBank;
               groundDeck = 'ground';
               groundTerrain = segTerrain;
+            }
+          } else if (s.deckType === 'slingshot' || s.deckType === 'wormhole_pad') {
+            const halfPadW = s.deckType === 'slingshot' ? 5.6 : 5.8;
+            if (absLat > halfPadW) continue;
+            const padY = s.ay + (s.by - s.ay) * t - Math.sin(s.bank) * lat + 0.02;
+            if (padY >= groundY - 0.16) {
+              groundY = Math.max(groundY, padY);
+              groundBank = s.bank;
+              groundDeck = 'ground';
+              groundTerrain = 'road';
             }
           } else if (s.deckType === 'skyway') {
             if (absLat > 6.65) continue;
@@ -1168,8 +1264,10 @@ export function createTrackSystem(materials, shaderSystem) {
     group,
     groundCurve,
     skywayCurve,
+    slingshotCurve,
     groundData,
     skywayData,
+    slingshotData,
     lagoons,
     registerSolidBox,
     registerSolidCylinder,

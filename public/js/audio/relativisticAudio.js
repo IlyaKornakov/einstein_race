@@ -450,7 +450,12 @@ export class RelativisticAudioEngine {
         const pot = (ax * dx + ay * dy + az * dz) * effScale / Math.max(4.0, c2);
         doppler *= Math.max(0.35, Math.min(2.8, 1.0 + 0.68 * pot));
       }
-      doppler = Math.max(0.18, Math.min(5.5, doppler));
+      if ((settings.enableGR ?? true) && this.metric.gravLapseAt) {
+        const emitAlpha = this.metric.gravLapseAt(sx, sy, sz);
+        const obsAlpha = Math.max(0.08, observer.gravAlpha || 1.0);
+        doppler *= emitAlpha / obsAlpha;
+      }
+      doppler = Math.max(0.18, Math.min(6.5, doppler));
     }
 
     let appX = dx;
@@ -471,6 +476,28 @@ export class RelativisticAudioEngine {
     const tEmit = observer.event[0] - (settings.enableRetardation ? dist / c : 0.0);
 
     return { doppler, dist, pan, atten, tEmit };
+  }
+
+  triggerWormholeWarp() {
+    if (!this.ctx || this.ctx.state !== 'running' || !this.masterEnabled) return;
+    const now = this.ctx.currentTime;
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+    notes.forEach((hz, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gn = this.ctx.createGain();
+      osc.type = 'sine';
+      const t0 = now + idx * 0.035;
+      osc.frequency.setValueAtTime(hz * 0.75, t0);
+      osc.frequency.exponentialRampToValueAtTime(hz * 1.5, t0 + 0.38);
+      gn.gain.setValueAtTime(0.001, t0);
+      gn.gain.linearRampToValueAtTime(0.09, t0 + 0.05);
+      gn.gain.exponentialRampToValueAtTime(0.0008, t0 + 0.55);
+      osc.connect(gn);
+      gn.connect(this.reverbNode || this.cockpitBus);
+      gn.connect(this.cockpitBus);
+      osc.start(t0);
+      osc.stop(t0 + 0.58);
+    });
   }
 
   triggerCollision(severity = 0.6) {

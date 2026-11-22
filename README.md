@@ -52,6 +52,13 @@ Then open **http://127.0.0.1:8080** in any modern WebGL2 browser.
 6. **Dual-Reference-Frame Web Audio**:
    - **In-Car Frame ($\tau$)**: Cockpit synthwave radio (*Lightcone Overdrive*) and muffled exhaust purr play at invariant $1.0\times$ pitch and tempo in your own reference frame.
    - **City Rest Frame ($t$)**: Clock-tower Westminster chimes, plaza street organ, roadside sync beacons, and rival V10 / Shinkansen flybys undergo exact retarded acoustic/optical Doppler pitch & tempo shifts ($D$) and inverse-square attenuation.
+7. **General Relativity Curved Spacetime (`v2.0` — Black Hole Slingshot & Traversable Wormhole)**:
+   - **Spinning Kerr–Schwarzschild Black Hole (`(-34, 6.2, 54)` — Slingshot Bypass West of Grand Boulevard)**:
+     - Real-time 3D Velocity-Verlet null-geodesic ray-marched Event Horizon shadow ($b_{\text{crit}} = \frac{3\sqrt{3}}{2}\,r_s$), Photon Sphere ring ($r = 1.5\,r_s$), and double-imaged gravitationally lensed Novikov–Thorne accretion disk with Keplerian Doppler beaming ($D^4$) + CIE spectral shift.
+     - Closed-form Einstein-Ring gravitational lensing of surrounding 3D buildings, bridges, rival cars, and sky dome.
+     - **Racing Slingshot vs. Gravitational Time Dilation Trade-off**: Skimming prograde along the Slingshot Bypass whips your momentum forward via Kerr frame-dragging & Oberth assist up to $0.98c$, while Schwarzschild gravitational time dilation ($\alpha = \sqrt{1 - r_s/r}$) accelerates external Grandstand City Time $dt = \gamma\, d\tau / \alpha$ and blueshifts the outside universe!
+   - **Traversable Morris–Thorne Wormhole Shortcut (`Mouth A (-5, -150)` ↔ `Mouth B (201, +54)`)**:
+     - Spherical 3D curved-spacetime throat connecting the North end of Grand Boulevard directly to the East Skyline Back Straight (~450m shortcut!), rendering a live 3D `CubeCamera` panorama of the destination street refracted through Ellis–Bronnikov null geodesics with exterior Casimir negative-energy lensing rings.
 
 ---
 

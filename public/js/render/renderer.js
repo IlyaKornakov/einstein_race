@@ -105,6 +105,7 @@ export class RelativisticRenderer {
       enableDoppler: true,
       enableBeaming: true,
       enableAccelEquiv: true,
+      enableGR: true,
       autoExposure: true,
       timeOfDayHours: 16.35,
       autoDayCycle: true,

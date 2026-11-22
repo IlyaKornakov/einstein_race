@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { computeCalibratedSpectralMatrix, buildSpectralLUTData, getSpectralGLSL } from '../physics/spectral.js?v=1.5';
+import { computeCalibratedSpectralMatrix, buildSpectralLUTData, getSpectralGLSL } from '../physics/spectral.js?v=2.0';
 
 function createSpectralLUTTexture() {
   const { width, height, floats } = buildSpectralLUTData();
@@ -55,6 +55,14 @@ export class RelativisticShaderSystem {
       uBeamingExponent: { value: 3.2 },
       uRgbToSpectralWeights: { value: spectralMat3 },
       uSpectralLUT: { value: spectralLUT },
+
+      // General Relativity (v2.0) Shared Uniforms
+      uEnableGR: { value: 1.0 },
+      uBHPos: { value: new THREE.Vector3(-34.0, 6.2, 54.0) },
+      uBHRs: { value: 4.4 },
+      uWormholeAPos: { value: new THREE.Vector3(-5.0, 3.1, -150.0) },
+      uWormholeBPos: { value: new THREE.Vector3(201.0, 4.0, 54.0) },
+      uWormholeR: { value: 4.2 },
 
       // Atmospheric / Time-of-Day uniforms shared with Sky & PMREM env cubemap
       uSunDir: { value: new THREE.Vector3(0.45, 0.72, 0.52).normalize() },
@@ -110,6 +118,18 @@ export class RelativisticShaderSystem {
     su.uEnableDoppler.value = settings.enableDoppler ? 1.0 : 0.0;
     su.uEnableBeaming.value = settings.enableBeaming ? 1.0 : 0.0;
     su.uEnableAccelEquiv.value = (settings.enableAccelEquiv ?? true) ? 1.0 : 0.0;
+    const grOn = (settings.enableGR ?? true);
+    su.uEnableGR.value = grOn ? 1.0 : 0.0;
+    if (this.metric && 'enableGR' in this.metric) {
+      this.metric.enableGR = grOn;
+      if (this.metric.bhPos) {
+        su.uBHPos.value.set(this.metric.bhPos[0], this.metric.bhPos[1], this.metric.bhPos[2]);
+        su.uBHRs.value = this.metric.bhRs;
+        su.uWormholeAPos.value.set(this.metric.wormholeA[0], this.metric.wormholeA[1], this.metric.wormholeA[2]);
+        su.uWormholeBPos.value.set(this.metric.wormholeB[0], this.metric.wormholeB[1], this.metric.wormholeB[2]);
+        su.uWormholeR.value = this.metric.wormholeThroatR;
+      }
+    }
     su.uObsProperAccel.value.set(
       observer.properAcceleration[0],
       observer.properAcceleration[1],
@@ -139,7 +159,7 @@ export class RelativisticShaderSystem {
     const metricGLSL = this.metric.getShaderModule();
     const spectralGLSL = getSpectralGLSL();
 
-    const cacheTag = `rel_sr_v6_${material.type}`;
+    const cacheTag = `rel_gr_v2_${material.type}`;
     material.customProgramCacheKey = () => cacheTag;
 
     material.onBeforeCompile = (shader) => {
@@ -305,6 +325,9 @@ export class RelativisticShaderSystem {
         uniform float uEnableRetardation;
         uniform vec3 uObsProperAccel;
         uniform float uEnableAccelEquiv;
+        uniform float uEnableGR;
+        uniform vec3 uBHPos;
+        uniform float uBHRs;
         uniform float uSpectralUV;
         uniform float uSpectralNIR;
         uniform float uNarrowBandNm;
@@ -340,6 +363,18 @@ export class RelativisticShaderSystem {
           float r = length(locPos);
           vec3 eff = (r > 65.0) ? (locPos * (65.0 / r)) : locPos;
           return clamp(1.0 + 0.68 * dot(uObsProperAccel, eff) / c2, 0.22, 3.8);
+        }
+
+        float evalFragGravDoppler(vec3 emitWorld) {
+          if (uEnableGR < 0.5 || uBHRs <= 0.01) return 1.0;
+          float effRs = uBHRs * 1.45;
+          float rEmit = length(emitWorld - uBHPos);
+          float rObs = length(uObsPos - uBHPos);
+          float fEmit = clamp(1.0 - max(0.0, rEmit - 55.0) / 40.0, 0.0, 1.0);
+          float fObs = clamp(1.0 - max(0.0, rObs - 55.0) / 40.0, 0.0, 1.0);
+          float g00Emit = max(0.09, 1.0 - (effRs / max(effRs * 1.04, rEmit)) * fEmit);
+          float g00Obs = max(0.09, 1.0 - (effRs / max(effRs * 1.04, rObs)) * fObs);
+          return sqrt(g00Emit / g00Obs);
         }
 
         // True Ray-Box 3D Parallax Interior Mapping for Apartment & Skyscraper Windows
@@ -469,7 +504,8 @@ export class RelativisticShaderSystem {
             vec3 photonDirPx = -vCityEmitOffset / dPx;
             float numDPx = uObsGamma * ( 1.0 - dot( uObsBeta, photonDirPx ) );
             float denDPx = ( uIsDynamic > 0.5 ) ? ( uEntityGamma * ( 1.0 - dot( uEntityBeta, photonDirPx ) ) ) : 1.0;
-            fragDoppler = clamp( ( numDPx / max( denDPx, 1e-4 ) ) * evalFragRindler( vObsLocalPos ), 0.03, 35.0 );
+            float grDPx = evalFragGravDoppler( uObsPos + vCityEmitOffset );
+            fragDoppler = clamp( ( numDPx / max( denDPx, 1e-4 ) ) * grDPx * evalFragRindler( vObsLocalPos ), 0.03, 35.0 );
             if ( uIsDynamic < 0.5 ) {
               fragEmitTime = uObsTime - ( uEnableRetardation * dPx ) / uSpeedOfLight;
             }
