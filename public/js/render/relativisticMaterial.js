@@ -10,7 +10,8 @@
  */
 
 import * as THREE from 'three';
-import { computeCalibratedSpectralMatrix, buildSpectralLUTData, getSpectralGLSL } from '../physics/spectral.js?v=2.2';
+import { computeCalibratedSpectralMatrix, buildSpectralLUTData, getSpectralGLSL } from '../physics/spectral.js?v=2.3';
+import { IS_MOBILE_DEVICE } from './renderer.js?v=2.3';
 
 function createSpectralLUTTexture() {
   const { width, height, floats } = buildSpectralLUTData();
@@ -165,7 +166,7 @@ export class RelativisticShaderSystem {
     const metricGLSL = this.metric.getShaderModule();
     const spectralGLSL = getSpectralGLSL();
 
-    const cacheTag = `rel_gr_v22_${material.type}`;
+    const cacheTag = `rel_gr_v23_${IS_MOBILE_DEVICE ? 'mob' : 'desk'}_${material.type}`;
     material.customProgramCacheKey = () => cacheTag;
 
     material.onBeforeCompile = (shader) => {
@@ -443,125 +444,201 @@ export class RelativisticShaderSystem {
         `
       );
 
-      // Inject Macro Anti-Tiling & Ground Contact AO into diffuseColor
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <map_fragment>',
-        /* glsl */ `
-        #include <map_fragment>
-        if ( uMacroDetail > 0.01 ) {
-          float nMacro = relNoise2D( vRestWorldPos.xz * 0.032 + vec2( vRestWorldPos.y * 0.05 ) );
-          float nMid = relNoise2D( vRestWorldPos.xz * 0.16 - vec2( vRestWorldPos.y * 0.11 ) );
-          float modShade = mix( 1.0, 0.80 + 0.36 * ( 0.65 * nMacro + 0.35 * nMid ), uMacroDetail );
-          diffuseColor.rgb *= modShade;
-        }
-        if ( uGroundAO > 0.01 ) {
-          float gAO = mix( 1.0 - 0.38 * uGroundAO, 1.0, smoothstep( -0.05, 2.1, vRestWorldPos.y ) );
-          float corniceStreak = 0.93 + 0.07 * sin( vRestWorldPos.x * 2.4 + vRestWorldPos.z * 2.4 );
-          diffuseColor.rgb *= gAO * corniceStreak;
-        }
-        if ( uRoadPolish > 0.01 ) {
-          // Darken tire-worn racing wheelpaths slightly like real rubbered-in Grand Prix tarmac!
-          float laneL = exp( -pow( ( vSurfUV.x - 0.28 ) * 8.5, 2.0 ) );
-          float laneR = exp( -pow( ( vSurfUV.x - 0.72 ) * 8.5, 2.0 ) );
-          float rubberMask = clamp( laneL + laneR, 0.0, 1.0 );
-          diffuseColor.rgb *= ( 1.0 - 0.18 * uRoadPolish * rubberMask );
-        }
-        `
-      );
+      if (IS_MOBILE_DEVICE) {
+        // Lightweight Mobile TBDR Fragment Path: preserves 100% of CIE 1931 Doppler + D^3 beaming + GR shifts
+        // from subdivided vertices while eliminating per-pixel 2D value-noise hashes, exp(-pow), and 3D room ray-boxes.
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          /* glsl */ `
+          #include <map_fragment>
+          if ( uGroundAO > 0.01 ) {
+            float gAO = mix( 1.0 - 0.34 * uGroundAO, 1.0, smoothstep( -0.05, 2.1, vRestWorldPos.y ) );
+            diffuseColor.rgb *= gAO;
+          }
+          `
+        );
 
-      // Inject Specular Racing-Line Roughness & Damp Sheen into roughnessFactor
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <roughnessmap_fragment>',
-        /* glsl */ `
-        #include <roughnessmap_fragment>
-        if ( uMacroDetail > 0.01 ) {
-          float rNoise = relNoise2D( vRestWorldPos.xz * 0.09 );
-          roughnessFactor = clamp( roughnessFactor + ( rNoise - 0.5 ) * 0.14 * uMacroDetail, 0.08, 0.98 );
-        }
-        if ( uRoadPolish > 0.01 ) {
-          float wL1 = exp( -pow( ( vSurfUV.x - 0.23 ) * 14.0, 2.0 ) );
-          float wL2 = exp( -pow( ( vSurfUV.x - 0.35 ) * 14.0, 2.0 ) );
-          float wR1 = exp( -pow( ( vSurfUV.x - 0.65 ) * 14.0, 2.0 ) );
-          float wR2 = exp( -pow( ( vSurfUV.x - 0.77 ) * 14.0, 2.0 ) );
-          float wheelTrack = clamp( wL1 + wL2 + wR1 + wR2, 0.0, 1.0 );
-          float microSheen = smoothstep( 0.60, 0.86, relNoise2D( vRestWorldPos.xz * 0.065 ) );
-          roughnessFactor = mix( roughnessFactor, 0.28, uRoadPolish * clamp( 0.68 * wheelTrack + 0.45 * microSheen, 0.0, 0.85 ) );
-        }
-        `
-      );
-
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <opaque_fragment>',
-        /* glsl */ `
-        {
-          // Add 3D Parallax Interior Room radiance behind architectural window glass!
-          if ( uInteriorRoom > 0.5 ) {
-            float glassMask = 0.0;
-            vec3 roomCol = sampleParallaxInterior( vRestWorldPos, vRestWorldNormal, vSurfUV, uInteriorRoom, glassMask );
-            if ( glassMask > 0.02 ) {
-              vec3 vDir = normalize( uObsPos - vRestWorldPos );
-              float fresnel = 0.08 + 0.88 * pow( 1.0 - clamp( abs( dot( vDir, normalize( vRestWorldNormal ) ) ), 0.0, 1.0 ), 4.2 );
-              vec3 extRefl = max( vec3( 0.0 ), outgoingLight - totalEmissiveRadiance );
-              outgoingLight = mix( outgoingLight, extRefl * ( 0.45 + 1.15 * fresnel ) + roomCol * ( 1.0 - 0.55 * fresnel ), glassMask * 0.88 );
-              totalEmissiveRadiance = mix( totalEmissiveRadiance, roomCol * ( 1.0 - 0.55 * fresnel ), glassMask * 0.88 );
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <opaque_fragment>',
+          /* glsl */ `
+          {
+            if ( uInteriorRoom > 0.5 && abs( vRestWorldNormal.y ) < 0.45 ) {
+              vec2 cellUV = ( uInteriorRoom > 1.5 ) ? fract( vSurfUV * 8.0 ) : fract( vSurfUV * 2.0 );
+              float frameX = smoothstep( 0.08, 0.14, cellUV.x ) * ( 1.0 - smoothstep( 0.86, 0.92, cellUV.x ) );
+              float frameY = smoothstep( 0.18, 0.25, cellUV.y ) * ( 1.0 - smoothstep( 0.88, 0.94, cellUV.y ) );
+              float glassMask = frameX * frameY;
+              if ( glassMask > 0.05 ) {
+                vec2 roomGrid = floor( vec2( ( vRestWorldPos.x + vRestWorldPos.z ) * 0.32, vRestWorldPos.y * 0.29 ) );
+                float rnd = relHash12( roomGrid );
+                float isLit = step( rnd, mix( 0.28, 0.74, uNightFactor ) );
+                vec3 paneRad = mix( vec3( 0.04, 0.06, 0.09 ), vec3( 0.95, 0.72, 0.42 ) * mix( 0.38, 1.25, uNightFactor ), isLit );
+                outgoingLight = mix( outgoingLight, outgoingLight * 0.45 + paneRad, glassMask * 0.80 );
+                totalEmissiveRadiance = mix( totalEmissiveRadiance, paneRad, glassMask * 0.80 );
+              }
             }
-          }
 
-          float fragDoppler = vRelDoppler;
-          float fragEmitTime = vRelEmitCoordTime;
-          float dPx = max( length( vCityEmitOffset ), 1e-5 );
-          if ( uIsCoMoving < 0.5 ) {
-            vec3 photonDirPx = -vCityEmitOffset / dPx;
-            float numDPx = uObsGamma * ( 1.0 - dot( uObsBeta, photonDirPx ) );
-            float denDPx = ( uIsDynamic > 0.5 ) ? ( uEntityGamma * ( 1.0 - dot( uEntityBeta, photonDirPx ) ) ) : 1.0;
-            float grDPx = evalFragGravDoppler( uObsPos + vCityEmitOffset );
-            fragDoppler = clamp( ( numDPx / max( denDPx, 1e-4 ) ) * grDPx * evalFragRindler( vObsLocalPos ), 0.02, 60.0 );
-            if ( uIsDynamic < 0.5 ) {
-              fragEmitTime = uObsTime - ( uEnableRetardation * dPx ) / uSpeedOfLight;
+            float fragDoppler = clamp( vRelDoppler, 0.02, 60.0 );
+            float fragEmitTime = vRelEmitCoordTime;
+            vec3 relReflected = max( vec3( 0.0 ), outgoingLight - totalEmissiveRadiance );
+            vec3 relEmissive = max( vec3( 0.0 ), totalEmissiveRadiance );
+            if ( uPulseHz > 1e-4 ) {
+              float w0 = 0.5 + 0.5 * cos( 6.2831853 * uPulseHz * fragEmitTime );
+              float w2 = w0 * w0;
+              relEmissive *= ( 0.18 + 2.4 * w2 * w2 * w2 );
             }
-          }
-
-          vec3 relReflected = max( vec3( 0.0 ), outgoingLight - totalEmissiveRadiance );
-          vec3 relEmissive = max( vec3( 0.0 ), totalEmissiveRadiance );
-          if ( uPulseHz > 1e-4 ) {
-            float wave = 0.5 + 0.5 * cos( 6.2831853 * uPulseHz * fragEmitTime );
-            relEmissive *= ( 0.18 + 2.4 * pow( wave, 6.0 ) );
-          }
-          vec3 shiftedRefl = applyRelativisticSpectrumCustom(
-            relReflected,
-            fragDoppler,
-            uSpectralUV,
-            uSpectralNIR,
-            0.0,
-            0.46
-          );
-          vec3 shiftedEmis = vec3( 0.0 );
-          if ( dot( relEmissive, relEmissive ) > 1e-8 ) {
-            shiftedEmis = applyRelativisticSpectrumCustom(
-              relEmissive,
+            vec3 finalRad = applyRelativisticSpectrumCustom(
+              relReflected,
               fragDoppler,
-              0.55,
-              0.65,
-              uNarrowBandNm,
-              1.95
+              uSpectralUV,
+              uSpectralNIR,
+              0.0,
+              0.46
             );
-          }
-          vec3 finalRad = shiftedRefl + shiftedEmis;
+            if ( dot( relEmissive, relEmissive ) > 1e-8 ) {
+              finalRad += applyRelativisticSpectrumCustom(
+                relEmissive,
+                fragDoppler,
+                0.55,
+                0.65,
+                uNarrowBandNm,
+                1.95
+              );
+            }
 
-          // Relativistic Aerial Perspective (Atmospheric Distance Scattering matching shifted sky!)
-          if ( uIsCoMoving < 0.5 && diffuseColor.a > 0.98 && dPx > 38.0 ) {
-            float heightFalloff = exp( -max( 0.0, vRestWorldPos.y ) * 0.020 );
-            float fogAmt = clamp( ( 1.0 - exp( -max( 0.0, dPx - 38.0 ) * 0.0022 ) ) * heightFalloff, 0.0, 0.62 );
-            vec3 restHaze = uSkyHorizon * mix( 0.88, 0.25, uNightFactor );
-            vec3 shiftedHaze = applyRelativisticHazeSpectrum( restHaze, fragDoppler );
-            finalRad = mix( finalRad, shiftedHaze, fogAmt );
-          }
+            float dSq = dot( vCityEmitOffset, vCityEmitOffset );
+            if ( uIsCoMoving < 0.5 && diffuseColor.a > 0.98 && dSq > 1600.0 ) {
+              float dPx = sqrt( dSq );
+              float fogAmt = clamp( ( dPx - 40.0 ) * 0.0018, 0.0, 0.58 ) * clamp( 1.0 - max( 0.0, vRestWorldPos.y ) * 0.016, 0.15, 1.0 );
+              vec3 restHaze = uSkyHorizon * mix( 0.88, 0.25, uNightFactor );
+              finalRad = mix( finalRad, applyRelativisticHazeSpectrum( restHaze, fragDoppler ), fogAmt );
+            }
 
-          outgoingLight = finalRad;
-        }
-        #include <opaque_fragment>
-        `
-      );
+            outgoingLight = finalRad;
+          }
+          #include <opaque_fragment>
+          `
+        );
+      } else {
+        // Inject Macro Anti-Tiling & Ground Contact AO into diffuseColor
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          /* glsl */ `
+          #include <map_fragment>
+          if ( uMacroDetail > 0.01 ) {
+            float nMacro = relNoise2D( vRestWorldPos.xz * 0.032 + vec2( vRestWorldPos.y * 0.05 ) );
+            float nMid = relNoise2D( vRestWorldPos.xz * 0.16 - vec2( vRestWorldPos.y * 0.11 ) );
+            float modShade = mix( 1.0, 0.80 + 0.36 * ( 0.65 * nMacro + 0.35 * nMid ), uMacroDetail );
+            diffuseColor.rgb *= modShade;
+          }
+          if ( uGroundAO > 0.01 ) {
+            float gAO = mix( 1.0 - 0.38 * uGroundAO, 1.0, smoothstep( -0.05, 2.1, vRestWorldPos.y ) );
+            float corniceStreak = 0.93 + 0.07 * sin( vRestWorldPos.x * 2.4 + vRestWorldPos.z * 2.4 );
+            diffuseColor.rgb *= gAO * corniceStreak;
+          }
+          if ( uRoadPolish > 0.01 ) {
+            // Darken tire-worn racing wheelpaths slightly like real rubbered-in Grand Prix tarmac!
+            float laneL = exp( -pow( ( vSurfUV.x - 0.28 ) * 8.5, 2.0 ) );
+            float laneR = exp( -pow( ( vSurfUV.x - 0.72 ) * 8.5, 2.0 ) );
+            float rubberMask = clamp( laneL + laneR, 0.0, 1.0 );
+            diffuseColor.rgb *= ( 1.0 - 0.18 * uRoadPolish * rubberMask );
+          }
+          `
+        );
+
+        // Inject Specular Racing-Line Roughness & Damp Sheen into roughnessFactor
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <roughnessmap_fragment>',
+          /* glsl */ `
+          #include <roughnessmap_fragment>
+          if ( uMacroDetail > 0.01 ) {
+            float rNoise = relNoise2D( vRestWorldPos.xz * 0.09 );
+            roughnessFactor = clamp( roughnessFactor + ( rNoise - 0.5 ) * 0.14 * uMacroDetail, 0.08, 0.98 );
+          }
+          if ( uRoadPolish > 0.01 ) {
+            float wL1 = exp( -pow( ( vSurfUV.x - 0.23 ) * 14.0, 2.0 ) );
+            float wL2 = exp( -pow( ( vSurfUV.x - 0.35 ) * 14.0, 2.0 ) );
+            float wR1 = exp( -pow( ( vSurfUV.x - 0.65 ) * 14.0, 2.0 ) );
+            float wR2 = exp( -pow( ( vSurfUV.x - 0.77 ) * 14.0, 2.0 ) );
+            float wheelTrack = clamp( wL1 + wL2 + wR1 + wR2, 0.0, 1.0 );
+            float microSheen = smoothstep( 0.60, 0.86, relNoise2D( vRestWorldPos.xz * 0.065 ) );
+            roughnessFactor = mix( roughnessFactor, 0.28, uRoadPolish * clamp( 0.68 * wheelTrack + 0.45 * microSheen, 0.0, 0.85 ) );
+          }
+          `
+        );
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <opaque_fragment>',
+          /* glsl */ `
+          {
+            // Add 3D Parallax Interior Room radiance behind architectural window glass!
+            if ( uInteriorRoom > 0.5 ) {
+              float glassMask = 0.0;
+              vec3 roomCol = sampleParallaxInterior( vRestWorldPos, vRestWorldNormal, vSurfUV, uInteriorRoom, glassMask );
+              if ( glassMask > 0.02 ) {
+                vec3 vDir = normalize( uObsPos - vRestWorldPos );
+                float fresnel = 0.08 + 0.88 * pow( 1.0 - clamp( abs( dot( vDir, normalize( vRestWorldNormal ) ) ), 0.0, 1.0 ), 4.2 );
+                vec3 extRefl = max( vec3( 0.0 ), outgoingLight - totalEmissiveRadiance );
+                outgoingLight = mix( outgoingLight, extRefl * ( 0.45 + 1.15 * fresnel ) + roomCol * ( 1.0 - 0.55 * fresnel ), glassMask * 0.88 );
+                totalEmissiveRadiance = mix( totalEmissiveRadiance, roomCol * ( 1.0 - 0.55 * fresnel ), glassMask * 0.88 );
+              }
+            }
+
+            float fragDoppler = vRelDoppler;
+            float fragEmitTime = vRelEmitCoordTime;
+            float dPx = max( length( vCityEmitOffset ), 1e-5 );
+            if ( uIsCoMoving < 0.5 ) {
+              vec3 photonDirPx = -vCityEmitOffset / dPx;
+              float numDPx = uObsGamma * ( 1.0 - dot( uObsBeta, photonDirPx ) );
+              float denDPx = ( uIsDynamic > 0.5 ) ? ( uEntityGamma * ( 1.0 - dot( uEntityBeta, photonDirPx ) ) ) : 1.0;
+              float grDPx = evalFragGravDoppler( uObsPos + vCityEmitOffset );
+              fragDoppler = clamp( ( numDPx / max( denDPx, 1e-4 ) ) * grDPx * evalFragRindler( vObsLocalPos ), 0.02, 60.0 );
+              if ( uIsDynamic < 0.5 ) {
+                fragEmitTime = uObsTime - ( uEnableRetardation * dPx ) / uSpeedOfLight;
+              }
+            }
+
+            vec3 relReflected = max( vec3( 0.0 ), outgoingLight - totalEmissiveRadiance );
+            vec3 relEmissive = max( vec3( 0.0 ), totalEmissiveRadiance );
+            if ( uPulseHz > 1e-4 ) {
+              float wave = 0.5 + 0.5 * cos( 6.2831853 * uPulseHz * fragEmitTime );
+              relEmissive *= ( 0.18 + 2.4 * pow( wave, 6.0 ) );
+            }
+            vec3 shiftedRefl = applyRelativisticSpectrumCustom(
+              relReflected,
+              fragDoppler,
+              uSpectralUV,
+              uSpectralNIR,
+              0.0,
+              0.46
+            );
+            vec3 shiftedEmis = vec3( 0.0 );
+            if ( dot( relEmissive, relEmissive ) > 1e-8 ) {
+              shiftedEmis = applyRelativisticSpectrumCustom(
+                relEmissive,
+                fragDoppler,
+                0.55,
+                0.65,
+                uNarrowBandNm,
+                1.95
+              );
+            }
+            vec3 finalRad = shiftedRefl + shiftedEmis;
+
+            // Relativistic Aerial Perspective (Atmospheric Distance Scattering matching shifted sky!)
+            if ( uIsCoMoving < 0.5 && diffuseColor.a > 0.98 && dPx > 38.0 ) {
+              float heightFalloff = exp( -max( 0.0, vRestWorldPos.y ) * 0.020 );
+              float fogAmt = clamp( ( 1.0 - exp( -max( 0.0, dPx - 38.0 ) * 0.0022 ) ) * heightFalloff, 0.0, 0.62 );
+              vec3 restHaze = uSkyHorizon * mix( 0.88, 0.25, uNightFactor );
+              vec3 shiftedHaze = applyRelativisticHazeSpectrum( restHaze, fragDoppler );
+              finalRad = mix( finalRad, shiftedHaze, fogAmt );
+            }
+
+            outgoingLight = finalRad;
+          }
+          #include <opaque_fragment>
+          `
+        );
+      }
     };
 
     material.userData = material.userData || {};

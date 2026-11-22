@@ -19,7 +19,7 @@ import { GLTFLoader } from '../../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../../vendor/DRACOLoader.js';
 import { clone as cloneSkeleton } from '../../vendor/SkeletonUtils.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.2';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.3';
 
 /**
  * Merges static child submeshes sharing identical Material & vertex attribute layout inside a
@@ -566,6 +566,7 @@ export class EntityManager {
     return {
       root,
       model,
+      lodProxy: !isCoMoving && IS_MOBILE_DEVICE ? this._createMobileFarLOD(root, uniforms, bodyHex, false) : null,
       uniforms,
       wheelFL,
       wheelFR,
@@ -575,6 +576,49 @@ export class EntityManager {
       brakeMaterials,
       wheelRadius: 0.358,
     };
+  }
+
+  _createMobileFarLOD(root, uniforms, bodyHex, isTruck = false) {
+    const lod = new THREE.Group();
+    lod.visible = false;
+    const bodyMat = this.shaderSystem.patchMaterial(
+      new THREE.MeshStandardMaterial({ color: bodyHex, metalness: 0.55, roughness: 0.22 }),
+      uniforms
+    );
+    const cabinMat = this.shaderSystem.patchMaterial(
+      new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.2, roughness: 0.1 }),
+      uniforms
+    );
+    const tailMat = this.shaderSystem.patchMaterial(
+      new THREE.MeshStandardMaterial({ color: 0xff1410, emissive: 0xff1410, emissiveIntensity: 2.2 }),
+      uniforms,
+      { narrowBandNm: 635.0 }
+    );
+    const w = isTruck ? 2.2 : 1.98;
+    const h = isTruck ? 2.1 : 0.72;
+    const l = isTruck ? 4.4 : 4.35;
+    const lower = new THREE.Mesh(new THREE.BoxGeometry(w, h, l, 2, 1, 3), bodyMat);
+    lower.position.y = h * 0.5 + 0.18;
+    lower.geometry.setAttribute('uv1', lower.geometry.getAttribute('uv'));
+    lower.frustumCulled = false;
+    lod.add(lower);
+
+    if (!isTruck) {
+      const canopy = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.44, 2.05, 1, 1, 2), cabinMat);
+      canopy.position.set(0, 1.02, 0.15);
+      canopy.geometry.setAttribute('uv1', canopy.geometry.getAttribute('uv'));
+      canopy.frustumCulled = false;
+      lod.add(canopy);
+    }
+
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(w * 0.86, 0.16, 0.12), tailMat);
+    tail.position.set(0, 0.65, l * 0.5 + 0.02);
+    tail.geometry.setAttribute('uv1', tail.geometry.getAttribute('uv'));
+    tail.frustumCulled = false;
+    lod.add(tail);
+
+    root.add(lod);
+    return lod;
   }
 
   _instantiateConceptCar(conceptGltf, bodyHex) {
@@ -630,7 +674,8 @@ export class EntityManager {
     });
 
     this._attachRelativisticContactShadow(root, uniforms, 2.35, 4.65);
-    return { root, uniforms, wheelRadius: 0.36 };
+    const lodProxy = IS_MOBILE_DEVICE ? this._createMobileFarLOD(root, uniforms, bodyHex, false) : null;
+    return { root, model, lodProxy, uniforms, wheelRadius: 0.36 };
   }
 
   _instantiateMilkTruck(truckGltf) {
@@ -652,9 +697,10 @@ export class EntityManager {
     });
 
     this._attachRelativisticContactShadow(root, uniforms, 2.65, 5.10);
+    const lodProxy = IS_MOBILE_DEVICE ? this._createMobileFarLOD(root, uniforms, 0xdbeafe, true) : null;
     const w0 = model.getObjectByName('Wheels');
     const w1 = model.getObjectByName('Wheels.001');
-    return { root, uniforms, truckWheels: [w0, w1].filter(Boolean), wheelRadius: 0.40 };
+    return { root, model, lodProxy, uniforms, truckWheels: [w0, w1].filter(Boolean), wheelRadius: 0.40 };
   }
 
   _spawnGrandPrixAndTraffic(ferrariGltf, ferrariAOTex, conceptGltf, truckGltf) {
@@ -1564,7 +1610,13 @@ export class EntityManager {
       if (IS_MOBILE_DEVICE) {
         const dxObs = npc.x - vehicle.carX;
         const dzObs = npc.z - vehicle.carZ;
-        npc.root.visible = (dxObs * dxObs + dzObs * dzObs) < 250.0 * 250.0;
+        const d2Obs = dxObs * dxObs + dzObs * dzObs;
+        npc.root.visible = d2Obs < 260.0 * 260.0;
+        if (npc.model && npc.lodProxy) {
+          const useHigh = d2Obs < 68.0 * 68.0;
+          npc.model.visible = useHigh;
+          npc.lodProxy.visible = !useHigh;
+        }
       }
       npc.uniforms.uEntityPosNow.value.set(npc.x, npc.y + npc.hopY + 0.55, npc.z);
       npc.uniforms.uEntityBeta.value.set(bx, by, bz);
@@ -1601,7 +1653,7 @@ export class EntityManager {
       if (IS_MOBILE_DEVICE && p.x !== undefined) {
         const dxP = p.x - vehicle.carX;
         const dzP = p.z - vehicle.carZ;
-        p.root.visible = (dxP * dxP + dzP * dzP) < 175.0 * 175.0;
+        p.root.visible = (dxP * dxP + dzP * dzP) < 92.0 * 92.0;
         if (!p.root.visible && !p.isStaticPerformer) continue;
       }
       if (p.mixer) p.mixer.update(Math.min(0.10, dtC));
@@ -1611,6 +1663,8 @@ export class EntityManager {
       const sign = p.rev ? -1.0 : 1.0;
       p.s = (((p.s + sign * walkV * dtC) % p.totalLen) + p.totalLen) % p.totalLen;
       const pose = this.cityWorld.sampleLanePose('ground', p.s, p.lane, p.rev);
+      p.x = pose.pos.x;
+      p.z = pose.pos.z;
       const footSurf = this.cityWorld.getSupportSurface(pose.pos.x, pose.pos.y + 0.3, pose.pos.z);
 
       p.root.position.set(pose.pos.x, footSurf.y, pose.pos.z);

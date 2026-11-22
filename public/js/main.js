@@ -2,16 +2,16 @@
  * Relativistic Grand Prix — Main Game Loop, Rest-Frame Radar & Twin-Paradox Race Manager
  */
 
-import { ObserverState, GeneralRelativityMetric } from './physics/spacetime.js?v=2.2';
-import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=2.2';
-import { VehicleController } from './physics/vehicle.js?v=2.2';
-import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=2.2';
-import { buildPBRMaterialLibrary } from './render/textures.js?v=2.2';
-import { buildCityWorld } from './world/cityBuilder.js?v=2.2';
-import { EntityManager } from './world/entities.js?v=2.2';
-import { GeneralRelativitySystem } from './world/generalRelativity.js?v=2.2';
-import { RelativisticRenderer } from './render/renderer.js?v=2.2';
-import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=2.2';
+import { ObserverState, GeneralRelativityMetric } from './physics/spacetime.js?v=2.3';
+import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=2.3';
+import { VehicleController } from './physics/vehicle.js?v=2.3';
+import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=2.3';
+import { buildPBRMaterialLibrary } from './render/textures.js?v=2.3';
+import { buildCityWorld } from './world/cityBuilder.js?v=2.3';
+import { EntityManager } from './world/entities.js?v=2.3';
+import { GeneralRelativitySystem } from './world/generalRelativity.js?v=2.3';
+import { RelativisticRenderer } from './render/renderer.js?v=2.3';
+import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=2.3';
 
 function formatClock(seconds) {
   const s = Math.max(0, seconds);

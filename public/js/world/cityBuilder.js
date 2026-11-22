@@ -19,8 +19,8 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { createTrackSystem } from './trackBuilder.js?v=2.2';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.2';
+import { createTrackSystem } from './trackBuilder.js?v=2.3';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.3';
 
 const _mat4 = new THREE.Matrix4();
 const _quat = new THREE.Quaternion();
@@ -176,7 +176,7 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // Surrounding Park Lawn Ground Plane (with sculpted basins for the Infield Reflecting Lagoons!)
   {
-    const parkSegs = IS_MOBILE_DEVICE ? 88 : 168;
+    const parkSegs = IS_MOBILE_DEVICE ? 48 : 168;
     const groundGeo = new THREE.PlaneGeometry(1560, 1560, parkSegs, parkSegs);
     groundGeo.rotateX(-Math.PI * 0.5);
     const pos = groundGeo.getAttribute('position');
@@ -1061,7 +1061,7 @@ export function buildCityWorld(materials, shaderSystem) {
   const tyrePoses = [];
   const conePoses = [];
 
-  const propFrameStep = IS_MOBILE_DEVICE ? 28 : 14;
+  const propFrameStep = IS_MOBILE_DEVICE ? 34 : 14;
   for (let i = 0; i < frames.length; i += propFrameStep) {
     const f = frames[i];
     // Chicane tire stacks & cones on sweeping outer shoulders!

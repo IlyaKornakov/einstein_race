@@ -20,7 +20,8 @@ import { ShaderPass } from '../../vendor/ShaderPass.js';
 
 export const IS_MOBILE_DEVICE =
   typeof navigator !== 'undefined' &&
-  (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') ||
+  ((typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mobile') === '1') ||
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') ||
     (navigator.maxTouchPoints > 1 &&
       typeof window !== 'undefined' &&
       Math.min(window.innerWidth, window.innerHeight) < 920));
@@ -135,11 +136,10 @@ export class RelativisticRenderer {
     this.threeRenderer = new THREE.WebGLRenderer({
       canvas,
       antialias: false,
-      powerPreference: this.isMobile ? 'default' : 'high-performance',
+      powerPreference: this.isMobile ? 'high-performance' : 'high-performance',
       stencil: false,
     });
-    const maxDpr = this.isMobile ? 1.0 : 1.5;
-    this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
+    this._applyOptimalPixelRatio(window.innerWidth, window.innerHeight);
     this.threeRenderer.setSize(window.innerWidth, window.innerHeight, false);
     this.threeRenderer.outputColorSpace = THREE.SRGBColorSpace;
     this.threeRenderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -251,7 +251,34 @@ export class RelativisticRenderer {
     this.currentExposure = 1.0;
     this.baseTodExposure = 1.0;
 
+    // Preallocated scratch vectors/colors to avoid per-frame GC pauses on Mobile!
+    this._zCol = new THREE.Vector3();
+    this._hCol = new THREE.Vector3();
+    this._zenithDay = new THREE.Vector3(0.048, 0.175, 0.54);
+    this._zenithSunset = new THREE.Vector3(0.065, 0.095, 0.28);
+    this._zenithNight = new THREE.Vector3(0.004, 0.008, 0.022);
+    this._horizDay = new THREE.Vector3(0.35, 0.54, 0.80);
+    this._horizSunset = new THREE.Vector3(0.88, 0.34, 0.14);
+    this._horizNight = new THREE.Vector3(0.014, 0.024, 0.052);
+    this._sunWarm = new THREE.Color();
+    this._sunOrange = new THREE.Color(0xff7235);
+    this._sunWhite = new THREE.Color(0xfff7ea);
+    this._lightDir = new THREE.Vector3(0.4, 0.75, 0.5);
+
     window.addEventListener('resize', () => this._onResize());
+  }
+
+  _applyOptimalPixelRatio(w, h) {
+    if (!this.isMobile) {
+      this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      return;
+    }
+    // Cap total shaded mobile pixels at ~410k (854x480 equivalent) so phones & tablets hold smooth FPS!
+    const cssPixels = Math.max(1, w * h);
+    const maxMobilePixels = 854 * 480;
+    const budgetDpr = Math.sqrt(maxMobilePixels / cssPixels);
+    const dpr = Math.max(0.65, Math.min(window.devicePixelRatio || 1, 0.95, budgetDpr));
+    this.threeRenderer.setPixelRatio(dpr);
   }
 
   attachWorld(materials, cityWorld) {
@@ -265,8 +292,7 @@ export class RelativisticRenderer {
     const h = Math.max(1, window.innerHeight);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    const maxDpr = this.isMobile ? 1.0 : 1.5;
-    this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
+    this._applyOptimalPixelRatio(w, h);
     this.threeRenderer.setSize(w, h, false);
     if (this.composer) {
       const drawSize = this.threeRenderer.getDrawingBufferSize(new THREE.Vector2());
@@ -309,22 +335,14 @@ export class RelativisticRenderer {
     su.uNightFactor.value = nightFactor;
 
     // Sky zenith & horizon colors across Day -> Crimson Sunset/Sunrise -> Deep Starry Night
-    const zenithDay = new THREE.Vector3(0.048, 0.175, 0.54);
-    const zenithSunset = new THREE.Vector3(0.065, 0.095, 0.28);
-    const zenithNight = new THREE.Vector3(0.004, 0.008, 0.022);
-
-    const horizDay = new THREE.Vector3(0.35, 0.54, 0.80);
-    const horizSunset = new THREE.Vector3(0.88, 0.34, 0.14);
-    const horizNight = new THREE.Vector3(0.014, 0.024, 0.052);
-
-    const zCol = zenithNight.clone().lerp(zenithDay, dayFactor).lerp(zenithSunset, twilightFactor * 0.78);
-    const hCol = horizNight.clone().lerp(horizDay, dayFactor).lerp(horizSunset, twilightFactor * 0.88);
+    const zCol = this._zCol.copy(this._zenithNight).lerp(this._zenithDay, dayFactor).lerp(this._zenithSunset, twilightFactor * 0.78);
+    const hCol = this._hCol.copy(this._horizNight).lerp(this._horizDay, dayFactor).lerp(this._horizSunset, twilightFactor * 0.88);
     su.uSkyZenith.value.copy(zCol);
     su.uSkyHorizon.value.copy(hCol);
 
     // Solar / Lunar direct directional light
     if (sy > -0.06) {
-      const sunWarm = new THREE.Color(0xff7235).lerp(new THREE.Color(0xfff7ea), THREE.MathUtils.smoothstep(sy, 0.0, 0.38));
+      const sunWarm = this._sunWarm.copy(this._sunOrange).lerp(this._sunWhite, THREE.MathUtils.smoothstep(sy, 0.0, 0.38));
       this.sunLight.color.copy(sunWarm);
       this.sunLight.intensity = THREE.MathUtils.lerp(0.35, 3.35, THREE.MathUtils.smoothstep(sy, -0.05, 0.32));
       su.uSunRadiance.value.set(
@@ -332,7 +350,7 @@ export class RelativisticRenderer {
         sunWarm.g * (4.0 + 7.0 * dayFactor),
         sunWarm.b * (4.0 + 7.0 * dayFactor)
       );
-      this._lightDir = sunDir.clone();
+      this._lightDir.copy(sunDir);
       if (this._lightDir.y < 0.08) {
         this._lightDir.y = 0.08;
         this._lightDir.normalize();
@@ -342,7 +360,7 @@ export class RelativisticRenderer {
       this.sunLight.color.setHex(0x8ab4f8);
       this.sunLight.intensity = 0.52;
       su.uSunRadiance.value.set(0.0, 0.0, 0.0);
-      this._lightDir = new THREE.Vector3(-0.38, 0.64, -0.45).normalize();
+      this._lightDir.set(-0.38, 0.64, -0.45).normalize();
     }
 
     this.hemiLight.color.setRGB(
@@ -367,12 +385,12 @@ export class RelativisticRenderer {
       }
     }
 
-    // Rebake HDR PMREM Cubemap Reflections so car clearcoat & skyscrapers reflect live Sunset/Day/Night!
+    // Rebake HDR PMREM Cubemap Reflections on Desktop (or on explicit `forceEnvBake` preset click on Mobile;
+    // avoids mid-race multi-pass PMREM render-target allocation & GPU stalls on Mobile!)
     const nowMs = performance.now();
-    const minBakeIntervalMs = this.isMobile ? 2400.0 : 320.0;
-    const minTodStep = this.isMobile ? 1.15 : 0.42;
     const todDiff = Math.min(Math.abs(h - this.lastEnvBakedTod), 24.0 - Math.abs(h - this.lastEnvBakedTod));
-    if (!this.contextLost && (forceEnvBake || (todDiff > minTodStep && nowMs - this.lastEnvBakeRealMs > minBakeIntervalMs))) {
+    const shouldAutoBake = !this.isMobile && todDiff > 0.48 && nowMs - this.lastEnvBakeRealMs > 360.0;
+    if (!this.contextLost && (forceEnvBake || shouldAutoBake)) {
       this.lastEnvBakedTod = h;
       this.lastEnvBakeRealMs = nowMs;
       const nextEnv = this.pmremGenerator.fromScene(this.envScene, 0.015);

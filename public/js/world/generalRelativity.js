@@ -17,8 +17,8 @@
  */
 
 import * as THREE from 'three';
-import { getSpectralGLSL } from '../physics/spectral.js?v=2.2';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.2';
+import { getSpectralGLSL } from '../physics/spectral.js?v=2.3';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.3';
 
 function makePortalGantrySign(title, subtitle, bgHex = '#311042', borderHex = '#38bdf8') {
   const scale = IS_MOBILE_DEVICE ? 0.5 : 1.0;
@@ -257,14 +257,21 @@ export class GeneralRelativitySystem {
   _buildBlackHoleRaymarcher() {
     const metricGLSL = this.metric.getShaderModule();
     const spectralGLSL = getSpectralGLSL();
-    const steps = IS_MOBILE_DEVICE ? 30 : 48;
+    const steps = IS_MOBILE_DEVICE ? 24 : 48;
+    const stepMul = IS_MOBILE_DEVICE ? '0.20' : '0.13';
+    const stepMin = IS_MOBILE_DEVICE ? '0.10' : '0.065';
+    const stepMax = IS_MOBILE_DEVICE ? '2.35' : '1.45';
 
     const uniforms = Object.assign({}, this.shaderSystem.sharedUniforms, {
       uBoundRadius: { value: this.bhBoundRadius },
       uInsideBH: { value: 0.0 },
     });
 
-    const geo = new THREE.SphereGeometry(this.bhBoundRadius, 52, 38);
+    const geo = new THREE.SphereGeometry(
+      this.bhBoundRadius,
+      IS_MOBILE_DEVICE ? 32 : 52,
+      IS_MOBILE_DEVICE ? 24 : 38
+    );
     const mat = new THREE.ShaderMaterial({
       name: 'KerrSchwarzschildBlackHole',
       uniforms,
@@ -380,6 +387,14 @@ export class GeneralRelativitySystem {
 
           vec3 hVec = cross(pos, vel);
           float h2 = dot(hVec, hVec);
+          float bCrit = 2.5980762 * rs;
+          float bImpact = sqrt(h2);
+          float r0Init = length(pos);
+          bool ingoing0 = dot(pos, vel) < 0.0;
+          // Exact Synge (1966) null-geodesic capture theorem across r_0 > 1.5 r_H and r_0 <= 1.5 r_H:
+          bool analyticallyCaptured = (r0Init > 1.5 * rs)
+            ? (ingoing0 && bImpact < bCrit)
+            : (ingoing0 || bImpact >= bCrit);
 
           vec3 accumRad = vec3(0.0);
           float transmittance = 1.0;
@@ -396,7 +411,9 @@ export class GeneralRelativitySystem {
           for (int step = 0; step < ${steps}; step++) {
             float r = length(pos);
             minR = min(minR, r);
-            if (r <= rs * 1.008) {
+            // Once an analytically-captured ray passes inside the inner ISCO edge (rIn = 1.62 r_H),
+            // no accretion disk matter exists inside r < 1.56 r_H and capture into r_H is guaranteed!
+            if (r <= rs * 1.008 || (analyticallyCaptured && r < 1.56 * rs)) {
               captured = true;
               break;
             }
@@ -405,7 +422,7 @@ export class GeneralRelativitySystem {
             }
 
             float vSpeed = max(0.25, length(vel));
-            float dsSpatial = clamp(0.13 * (r - 0.84 * rs), 0.065, 1.45);
+            float dsSpatial = clamp(${stepMul} * (r - 0.84 * rs), ${stepMin}, ${stepMax});
             float dLam = dsSpatial / vSpeed;
 
             float invR2 = 1.0 / max(r * r, 0.04);
@@ -469,13 +486,15 @@ export class GeneralRelativitySystem {
             vel = nextVel;
           }
 
+          if (analyticallyCaptured) {
+            captured = true;
+          }
+
           // 3. Razor-Sharp Photon Sphere Ring along critical escape boundary (b -> 2.598 r_H)
           if (!captured) {
-            float bCrit = 2.598076 * rs;
-            float bImpact = sqrt(h2);
             float bDiff = abs(bImpact - bCrit) / rs;
-            float photonRing = exp(-bDiff * bDiff * 38.0) * 1.65;
-            if (photonRing > 0.005) {
+            float photonRing = exp(-bDiff * bDiff * 95.0) * 1.35 + exp(-bDiff * bDiff * 18.0) * 0.26;
+            if (photonRing > 0.004) {
               vec3 ringCol = applyRelativisticSpectrumCustom(
                 vec3(2.0, 1.6, 1.2) * photonRing,
                 clamp(srObsD * diskGravShift, 0.12, 14.0),
@@ -543,7 +562,11 @@ export class GeneralRelativitySystem {
         uPortalRot: { value: portalRotMat },
       });
 
-      const geo = new THREE.SphereGeometry(this.wormholeShellRadius, 48, 36);
+      const geo = new THREE.SphereGeometry(
+        this.wormholeShellRadius,
+        IS_MOBILE_DEVICE ? 28 : 48,
+        IS_MOBILE_DEVICE ? 20 : 36
+      );
       const mat = new THREE.ShaderMaterial({
         name: 'MorrisThorneWormholeMouth',
         uniforms,
@@ -680,7 +703,11 @@ export class GeneralRelativitySystem {
       uDestRot: { value: this.rotMatAToB.clone() },
     });
 
-    const geo = new THREE.SphereGeometry(28.0, 56, 40);
+    const geo = new THREE.SphereGeometry(
+      28.0,
+      IS_MOBILE_DEVICE ? 32 : 56,
+      IS_MOBILE_DEVICE ? 24 : 40
+    );
     const mat = new THREE.ShaderMaterial({
       name: 'MorrisThorneCurvedThroat360',
       uniforms: this.throatUniforms,
@@ -1079,25 +1106,30 @@ export class GeneralRelativitySystem {
       }
     }
 
-    // --- 1. Live Dynamic Wormhole Cubemap Refresh (shows live cars, clocks & sun inside throat!) ---
-    this.cubeFrameCounter++;
+    // --- 1. Wormhole Cubemap Refresh (Desktop Only — on Mobile TBDR GPUs, 6-face CubeCamera full-scene
+    //        uncull passes cause massive multi-million-triangle stalls! Mobile uses the pre-baked cubemaps
+    //        computed at startup and evaluates all SR/GR ray bending & Doppler analytically at 60 FPS!) ---
     const wA = this.metric.wormholeA;
     const wB = this.metric.wormholeB;
     const dA = Math.hypot(vehicle.carX - wA[0], vehicle.carZ - wA[2]);
     const dB = Math.hypot(vehicle.carX - wB[0], vehicle.carZ - wB[2]);
     const minWDist = Math.min(dA, dB);
-    const todDiff = Math.min(Math.abs(todHours - this.lastCubeBakeTod), 24.0 - Math.abs(todHours - this.lastCubeBakeTod));
-    const refreshStride = IS_MOBILE_DEVICE ? 6 : 2;
 
-    if (todDiff > 1.2) {
-      this.lastCubeBakeTod = todHours;
-      this.bakeWormholePortals(observer, entities, cityWorld, skyMesh, 'both');
-    } else if ((this.inThroat || minWDist < 115.0) && this.cubeFrameCounter % refreshStride === 0) {
-      if (this.inThroat) {
-        const which = (this.cubeFrameCounter / refreshStride) % 2 === 0 ? 'A' : 'B';
-        this.bakeWormholePortals(observer, entities, cityWorld, skyMesh, which);
-      } else {
-        this.bakeWormholePortals(observer, entities, cityWorld, skyMesh, dA < dB ? 'B' : 'A');
+    if (!IS_MOBILE_DEVICE) {
+      this.cubeFrameCounter++;
+      const todDiff = Math.min(Math.abs(todHours - this.lastCubeBakeTod), 24.0 - Math.abs(todHours - this.lastCubeBakeTod));
+      const refreshStride = 4;
+
+      if (todDiff > 1.8 && minWDist < 220.0) {
+        this.lastCubeBakeTod = todHours;
+        this.bakeWormholePortals(observer, entities, cityWorld, skyMesh, 'both');
+      } else if ((this.inThroat || minWDist < 105.0) && this.cubeFrameCounter % refreshStride === 0) {
+        if (this.inThroat) {
+          const which = (this.cubeFrameCounter / refreshStride) % 2 === 0 ? 'A' : 'B';
+          this.bakeWormholePortals(observer, entities, cityWorld, skyMesh, which);
+        } else {
+          this.bakeWormholePortals(observer, entities, cityWorld, skyMesh, dA < dB ? 'B' : 'A');
+        }
       }
     }
 
@@ -1164,7 +1196,9 @@ export class GeneralRelativitySystem {
           this.throatUniforms.uDestRot.value.copy(this.rotMatBToA);
         }
 
-        this.bakeWormholePortals(observer, entities, cityWorld, skyMesh, 'both');
+        if (!IS_MOBILE_DEVICE) {
+          this.bakeWormholePortals(observer, entities, cityWorld, skyMesh, 'both');
+        }
         if (cityWorld) cityWorld.root.visible = false;
         if (skyMesh) skyMesh.visible = false;
         if (entities) entities.setExteriorHidden(true);
