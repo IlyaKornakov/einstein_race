@@ -17,8 +17,8 @@
  */
 
 import * as THREE from 'three';
-import { getSpectralGLSL } from '../physics/spectral.js?v=2.1';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.1';
+import { getSpectralGLSL } from '../physics/spectral.js?v=2.2';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.2';
 
 function makePortalGantrySign(title, subtitle, bgHex = '#311042', borderHex = '#38bdf8') {
   const scale = IS_MOBILE_DEVICE ? 0.5 : 1.0;
@@ -149,16 +149,16 @@ export class GeneralRelativitySystem {
 
     // 2. Overhead Highway Gantry for Black Hole Ergosphere & Slingshot (Z = +115 on Grand Boulevard)
     this._addSignGantry(
-      -2.2, 115.0, 0.0, 21.5,
+      -2.2, 115.0, 0.0, 25.0,
       '↙ BLACK HOLE ERGOSPHERE',
       'UP TO 50× TIME DILATION  •  KERR FRAME-DRAGGING',
       '#3b0764',
       '#c084fc'
     );
 
-    // 3. Overhead Highway Gantry for North Boulevard Wormhole Shortcut (Z = -125)
+    // 3. Overhead Highway Gantry for North Boulevard Wormhole Shortcut (Z = -256)
     this._addSignGantry(
-      -2.0, -125.0, 0.0, 20.0,
+      -2.0, -256.0, 0.0, 24.4,
       '↑ WORMHOLE SHORTCUT',
       '20m MORRIS–THORNE THROAT  →  EAST SKYLINE',
       '#083344',
@@ -167,7 +167,7 @@ export class GeneralRelativitySystem {
 
     // 4. Exotic-Matter Magnetic Containment Arch Rings around Wormhole Mouths A & B
     this._buildWormholeArchFrame(this.metric.wormholeA[0], 0.0, this.metric.wormholeA[2], 0.08);
-    this._buildWormholeArchFrame(this.metric.wormholeB[0], 1.05, this.metric.wormholeB[2], -0.22);
+    this._buildWormholeArchFrame(this.metric.wormholeB[0], 1.25, this.metric.wormholeB[2], -0.18);
   }
 
   _addSignGantry(cx, cz, yaw, spanW, title, subtitle, bgHex, borderHex = '#38bdf8', baseY = 0.0) {
@@ -526,7 +526,7 @@ export class GeneralRelativitySystem {
         -Math.sin(yawDelta), 0, Math.cos(yawDelta)
       );
 
-    this.rotMatAToB = makeRotMat(-2.82);
+    this.rotMatAToB = makeRotMat(-2.94);
     this.rotMatBToA = makeRotMat(Math.PI);
     this.rotMatIdentity = new THREE.Matrix3().identity();
 
@@ -835,8 +835,8 @@ export class GeneralRelativitySystem {
     }
     this.group.add(this.binaryGroup);
 
-    // 2. Sample East Skyline Back Straight frames (`X > 185, Z in [-16 .. +104]`) for Interferometer Gates!
-    const targetZs = [-12.0, 22.0, 74.0, 102.0];
+    // 2. Sample East Skyline Back Straight frames (`X > 320, Z in [-45 .. +135]`) for Interferometer Gates!
+    const targetZs = [-42.0, 8.0, 86.0, 134.0];
     const frames = this.track.groundData.frames;
 
     targetZs.forEach((tz, idx) => {
@@ -844,7 +844,7 @@ export class GeneralRelativitySystem {
       let bestD = Infinity;
       for (let i = 0; i < frames.length; i++) {
         const f = frames[i];
-        if (f.pos.x < 180.0) continue;
+        if (f.pos.x < 320.0) continue;
         const d = Math.abs(f.pos.z - tz);
         if (d < bestD) {
           bestD = d;
@@ -859,7 +859,7 @@ export class GeneralRelativitySystem {
           bestF.pos.x,
           bestF.pos.z,
           yaw,
-          26.8,
+          30.4,
           '↑ GRAVITATIONAL-WAVE CORRIDOR',
           'BINARY BH INSPIRAL  •  h₊ / hₓ SPACETIME RIPPLES',
           '#1e1b4b',
@@ -869,8 +869,8 @@ export class GeneralRelativitySystem {
         return;
       }
 
-      // LIGO Orthogonal Laser Interferometer Archway (wide 27m span outside sidewalk!)
-      const halfSpan = 13.5;
+      // LIGO Orthogonal Laser Interferometer Archway (wide 30.8m span outside sidewalk!)
+      const halfSpan = 15.4;
       const topY = bestF.pos.y + 8.2;
       for (const side of [-1, 1]) {
         const px = bestF.pos.x + bestF.right.x * side * halfSpan;
@@ -980,18 +980,18 @@ export class GeneralRelativitySystem {
     let exitX, exitFootY, exitZ, exitYaw;
     if (completedForward) {
       if (this.throatDir > 0) {
-        // Exited Mouth B onto East Skyline Back Straight!
-        exitX = 203.6; exitFootY = 1.06; exitZ = 63.5; exitYaw = 2.82;
+        // Exited Mouth B onto 600m East Skyline Back Straight!
+        exitX = 365.5; exitFootY = 1.18; exitZ = 72.0; exitYaw = 2.94;
       } else {
-        // Exited Mouth A onto North Grand Boulevard!
-        exitX = -3.2; exitFootY = 0.02; exitZ = -138.0; exitYaw = Math.PI;
+        // Exited Mouth A onto 600m North Grand Boulevard!
+        exitX = -3.4; exitFootY = 0.02; exitZ = -274.0; exitYaw = Math.PI;
       }
     } else {
       // Reversed back out the entrance mouth!
       if (this.throatDir > 0) {
-        exitX = -4.2; exitFootY = 0.02; exitZ = -139.5; exitYaw = this.throatEntryYaw;
+        exitX = -4.5; exitFootY = 0.02; exitZ = -276.0; exitYaw = this.throatEntryYaw;
       } else {
-        exitX = 203.2; exitFootY = 1.06; exitZ = 63.5; exitYaw = this.throatEntryYaw;
+        exitX = 364.5; exitFootY = 1.18; exitZ = 72.0; exitYaw = this.throatEntryYaw;
       }
     }
 
@@ -1136,7 +1136,7 @@ export class GeneralRelativitySystem {
         this.throatDir = enteringA ? 1 : -1;
         this.throatL = -this.throatHalfL;
         this.throatEntryYaw = vehicle.moveYaw;
-        this.throatExitYaw = enteringA ? 2.82 : Math.PI;
+        this.throatExitYaw = enteringA ? 2.94 : Math.PI;
 
         // Ensure minimum entry speed so coasting into the mouth glides smoothly through the 20m throat
         const pHoriz = Math.hypot(vehicle.px, vehicle.pz);

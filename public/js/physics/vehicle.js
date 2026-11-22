@@ -33,10 +33,10 @@ export class VehicleController {
     this.halfL = 2.22;        // [m] half-length
     this.wheelbase = 2.65;    // [m]
 
-    // Spawn on expanded 350m Grand Boulevard Straightaway facing North (-Z)!
-    this.carX = 2.6;
+    // Spawn on expanded 600m Grand Boulevard Straightaway facing North (-Z)!
+    this.carX = 2.8;
     this.footY = 0.01;
-    this.carZ = 158.0;
+    this.carZ = 192.0;
     this.verticalVel = 0.0;
 
     // 3D spatial relativistic momentum per unit mass: p_tilde = gamma * v [m/s]
@@ -59,16 +59,19 @@ export class VehicleController {
     /** Post-collision angular yaw velocity [rad/s proper] & temporary tire slip factor [0..1] */
     this.impactYawRate = 0.0;
     this.impactSlip = 0.0;
+    this.steerInput = 0.0;
+    this.steerAngle = 0.0;
     this.cameraShake = 0.0;
 
     /** Front wheel steering angle [-maxSteerRad .. +maxSteerRad] */
     this.steerAngle = 0.0;
+    this.steerInput = 0.0;
     this.maxSteerRad = (33.0 * Math.PI) / 180.0;
     this.wheelSpinAngle = 0.0;
     this.isBraking = false;
 
-    /** Maximum lateral proper tire grip [m/s^2] (~2.45g GT Aero Slick grip for fast sweepers!) */
-    this.maxLateralProperAccel = 24.0;
+    /** Maximum lateral proper tire grip [m/s^2] (~3.0g High-Downforce GT Aero Slicks for high-gamma sweepers!) */
+    this.maxLateralProperAccel = 29.5;
 
     /** Instantaneous proper G-forces felt in chassis & active terrain surface */
     this.properLongG = 0.0;
@@ -304,6 +307,8 @@ export class VehicleController {
     this.rapidity = 0.0;
     this.impactYawRate = 0.0;
     this.impactSlip = 0.0;
+    this.steerInput = 0.0;
+    this.steerAngle = 0.0;
     this.cameraShake = 0.0;
     this.moveYaw = yaw;
     this.velocityYaw = yaw;
@@ -500,8 +505,8 @@ export class VehicleController {
     //    per unit driver proper time dtau (`dt`), stepping forward rapidity linearly:
     //      d(eta)/dtau = a_0 / c  ==>  d(gamma*v)/dtau = gamma * a_0  ==>  dv/dtau = (1 - beta^2) * a_0
     const cScale = Math.min(2.4, Math.max(0.65, c / 25.0));
-    const engineProperAccel = (boost ? 16.2 : 9.8) * cScale * terrainTraction;
-    const brakeProperDecel = 16.8 * cScale * (0.68 + 0.32 * terrainTraction);
+    const engineProperAccel = (boost ? 15.2 : 9.0) * cScale * terrainTraction;
+    const brakeProperDecel = 17.5 * cScale * (0.68 + 0.32 * terrainTraction);
     const maxBetaClamped = Math.min(0.994, this.maxBeta);
     const maxPFwd = (maxBetaClamped * c) / Math.sqrt(1.0 - maxBetaClamped * maxBetaClamped);
     const minPFwd = -(0.32 * c) / Math.sqrt(1.0 - 0.10);
@@ -566,28 +571,38 @@ export class VehicleController {
 
     pFwd = Math.max(minPFwd, Math.min(maxPFwd, pFwd));
 
-    // 2. Relativistic Ackerman + Tire-Grip Steering (supports smooth analog mobile touch/tilt!)
+    // 2. Progressive Human-Playable Relativistic Steering Rack + Aero Downforce Grip:
+    //    Smooth progressive turn-in prevents twitchy over-correction at 0.90c+, while instant
+    //    re-centering straightens the car immediately when releasing A/D or touch steer!
+    const gammaHoriz = Math.sqrt(1.0 + (pFwd * pFwd + pLat * pLat) / c2);
+    const vFwd = pFwd / gammaHoriz;
+    const absSpeed = Math.abs(vFwd);
+    const speedBeta = Math.min(0.99, absSpeed / c);
+
     const keySteer = (steerRight ? 1 : 0) - (steerLeft ? 1 : 0);
     const analogClamped = this.canDrive ? Math.max(-1.0, Math.min(1.0, this.analogSteer)) : 0.0;
     const rawSteer = keySteer !== 0
       ? keySteer
-      : Math.sign(analogClamped) * Math.pow(Math.abs(analogClamped), 1.28);
-    const targetSteerAngle = rawSteer * this.maxSteerRad;
-    this.steerAngle += (targetSteerAngle - this.steerAngle) * Math.min(1.0, 14.0 * dt);
+      : Math.sign(analogClamped) * Math.pow(Math.abs(analogClamped), 1.25);
 
-    const gammaHoriz = Math.sqrt(1.0 + (pFwd * pFwd + pLat * pLat) / c2);
-    const vFwd = pFwd / gammaHoriz;
-    const absSpeed = Math.abs(vFwd);
+    const isReleasingOrCounter =
+      Math.abs(rawSteer) < Math.abs(this.steerInput) || rawSteer * this.steerInput < 0.0;
+    const steerRampRate = isReleasingOrCounter ? 17.0 : (6.8 - 2.4 * speedBeta);
+    this.steerInput += (rawSteer - this.steerInput) * Math.min(1.0, steerRampRate * dt);
+    if (Math.abs(rawSteer) < 1e-4 && Math.abs(this.steerInput) < 0.015) this.steerInput = 0.0;
+
+    const speedSensitivity = 1.0 / (1.0 + 1.35 * speedBeta * speedBeta);
+    this.steerAngle = this.steerInput * this.maxSteerRad * (0.35 + 0.65 * speedSensitivity);
 
     const effectiveMaxLatAccel = this.maxLateralProperAccel * terrainLatGrip;
     let steerYawRate = 0.0;
-    if (absSpeed > 0.05 && Math.abs(this.steerAngle) > 1e-4) {
+    if (absSpeed > 0.05 && Math.abs(this.steerInput) > 1e-4) {
       const kinProperRate = (gammaHoriz * absSpeed / this.wheelbase) * Math.abs(Math.tan(this.steerAngle));
-      const gripMaxProperRate = effectiveMaxLatAccel / Math.max(0.25, gammaHoriz * absSpeed);
+      const gripMaxProperRate = (effectiveMaxLatAccel * Math.abs(this.steerInput)) / Math.max(0.25, gammaHoriz * absSpeed);
       const magRate = Math.min(kinProperRate, gripMaxProperRate);
       // Reverse steering yaw direction cleanly when backing up in reverse gear, consistent in forward gear
       const revSign = vFwd < -0.15 ? -1.0 : 1.0;
-      steerYawRate = Math.sign(this.steerAngle) * magRate * revSign;
+      steerYawRate = Math.sign(this.steerInput) * magRate * revSign;
     }
 
     // Decay post-collision angular spin & tire slip via physical tire scrub damping

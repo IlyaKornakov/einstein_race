@@ -10,7 +10,7 @@
  *   4. High-Threshold Dual-Kawase HDR Bloom + Eye-Adapted ACES Filmic Tonemapping
  */
 
-import { getSpectralGLSL } from '../physics/spectral.js?v=2.1';
+import { getSpectralGLSL } from '../physics/spectral.js?v=2.2';
 
 export const SHADOW_VERT = /* glsl */ `#version 300 es
 precision highp float;

@@ -504,13 +504,13 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
     this.bhSpin = 0.98;    // Near-extremal Kerr spin a_* in [0, 1) (strong ergosphere frame-dragging!)
 
     // 2. Finite-Throat Traversable Morris–Thorne Wormhole Shortcut (North Boulevard <-> East Skyline)
-    this.wormholeA = new Float64Array([-5.0, 2.55, -150.0]);
-    this.wormholeB = new Float64Array([201.0, 3.45, 54.0]);
+    this.wormholeA = new Float64Array([-5.5, 2.55, -288.0]);
+    this.wormholeB = new Float64Array([360.5, 3.45, 60.0]);
     this.wormholeThroatR = 4.2;   // Throat radius b_0 [m]
-    this.wormholeLength = 20.0;   // Finite curved-spacetime proper throat length L [m] (~450m track shortcut!)
+    this.wormholeLength = 20.0;   // Finite curved-spacetime proper throat length L [m] (~920m track shortcut!)
 
     // 3. Binary Black Hole Merger Gravitational-Wave Source (overhead East Skyline Interferometer Corridor)
-    this.gwPos = new Float64Array([275.0, 52.0, 28.0]);
+    this.gwPos = new Float64Array([445.0, 56.0, 34.0]);
   }
 
   /**
@@ -796,8 +796,8 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
 
         // Transverse-Traceless (TT-Gauge) Quadrupole Gravitational Waves from East Skyline Binary Merger!
         if (uEnableGR > 0.5) {
-          vec2 gwHoriz = obs.cityEmitPos.xz - vec2(212.0, 34.0);
-          float gwEnv = 1.0 - smoothstep(46.0, 110.0, length(gwHoriz));
+          vec2 gwHoriz = obs.cityEmitPos.xz - vec2(370.0, 38.0);
+          float gwEnv = 1.0 - smoothstep(68.0, 145.0, length(gwHoriz));
           if (gwEnv > 0.002) {
             vec3 vGW = obs.cityEmitPos - uGWPos;
             float rGW = max(8.0, length(vGW));

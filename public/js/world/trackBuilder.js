@@ -46,8 +46,8 @@ function sampleRibbonFrames(curve, stepMeters = 1.25, isClosed = false, bankScal
     const ds = Math.max(0.5, (uNext - uPrev + (uNext < uPrev ? 1.0 : 0.0)) * totalLen);
     const signedCurv = dTan.dot(right) / ds; // > 0 when turning right
 
-    // Bank inward into fast corners (clamped to gentle realistic 4.5 deg max, zero on straightaways)
-    const rawBank = THREE.MathUtils.clamp(signedCurv * 3.2 * bankScale, -0.078, 0.078);
+    // Bank inward into fast sweeping corners (up to 6.0 deg = 0.105 rad for effortless high-gamma cornering!)
+    const rawBank = THREE.MathUtils.clamp(signedCurv * 11.5 * bankScale, -0.105, 0.105);
     // Taper banking smoothly to 0 near open spline endpoints (smooth merge!)
     const endFade = isClosed
       ? 1.0
@@ -133,54 +133,62 @@ export function createTrackSystem(materials, shaderSystem) {
   const group = new THREE.Group();
   group.name = 'RacingCircuitAndSkyway';
 
-  // 1. Expanded High-Speed Urban Grand Prix Loop (~1,520m Closed 3D Catmull-Rom)
-  //    Features a 350m unbroken Grand Boulevard Main Straightaway (Z = +222 -> -132)
-  //    and a 310m East Skyline Back Straight + wide sweeping F1-radius curves!
+  // 1. High-Speed Relativistic Stadium-Expressway Circuit (~2,362m Closed 3D Catmull-Rom)
+  //    Features TWO unbroken 600m straightaways (Grand Boulevard X=0 & East Skyline X=370)
+  //    connected by constant-radius R = 185m banked parabolic sweepers (~3x gentler curvature)!
   const groundPts = [
-    new THREE.Vector3(0.0, 0.0, 222.0),    // South Straightaway start
-    new THREE.Vector3(0.0, 0.0, 158.0),    // Starting Grid & Spawn Straight (facing -Z!)
-    new THREE.Vector3(0.0, 0.0, 94.0),     // Start / Finish Gantry
-    new THREE.Vector3(0.0, 0.0, 44.0),     // Y-Fork Skyway Interchange
-    new THREE.Vector3(0.0, 0.0, -18.0),    // Grand Limestone Triumphal Arch
-    new THREE.Vector3(0.0, 0.0, -78.0),    // Passing Clock Plaza & Bullet Train Viaduct
-    new THREE.Vector3(0.0, 0.0, -132.0),   // End of 350m High-Speed Boulevard Straight!
-    new THREE.Vector3(38.0, 0.2, -198.0),  // Turn 1 Wide Sweeper Entry
-    new THREE.Vector3(114.0, 0.6, -228.0), // Turn 2 North High-Speed Apex
-    new THREE.Vector3(190.0, 1.4, -182.0), // Turn 3 Skyline Sweeper
-    new THREE.Vector3(218.0, 2.2, -98.0),  // East Skyline Back Straight North
-    new THREE.Vector3(204.0, 1.4, 8.0),    // Gentle High-Speed S-Bend
-    new THREE.Vector3(218.0, 0.6, 114.0),  // East Skyline Back Straight South
-    new THREE.Vector3(186.0, 0.0, 204.0),  // South Sweeper Entry
-    new THREE.Vector3(108.0, 0.0, 256.0),  // Banked South Return Curve
-    new THREE.Vector3(24.0, 0.0, 246.0),   // Final Sweeper Alignment onto Main Straight
+    new THREE.Vector3(0.0, 0.0, 330.0),    // South Straightaway start (600m pure straight begins!)
+    new THREE.Vector3(0.0, 0.0, 262.0),    // Skyway Off-Ramp Merge zone
+    new THREE.Vector3(0.0, 0.0, 192.0),    // Starting Grid & Spawn Straight (facing -Z!)
+    new THREE.Vector3(0.0, 0.0, 94.0),     // Start / Finish Gantry & Black Hole Bypass split
+    new THREE.Vector3(0.0, 0.0, 12.0),     // Y-Fork Skyway Interchange & Triumphal Arch approach
+    new THREE.Vector3(0.0, 0.0, -78.0),    // Clock Plaza & Bullet Train Viaduct
+    new THREE.Vector3(0.0, 0.0, -174.0),   // High-Speed Relativistic Sprint Zone (0.94c+!)
+    new THREE.Vector3(0.0, 0.0, -270.0),   // End of 600m Grand Boulevard Straight / Wormhole Mouth A
+    // North R = 185m Constant-Radius Banked Sweeper (exact 36 deg arc increments!)
+    new THREE.Vector3(35.3, 0.5, -378.7),
+    new THREE.Vector3(127.8, 1.1, -445.9),
+    new THREE.Vector3(242.2, 1.6, -445.9),
+    new THREE.Vector3(334.7, 2.0, -378.7),
+    // 600m Unbroken East Skyline Back Straight (X = 370.0, Z = -270 -> +330)
+    new THREE.Vector3(370.0, 2.2, -270.0),
+    new THREE.Vector3(370.0, 1.8, -120.0),
+    new THREE.Vector3(370.0, 1.3, 30.0),   // Gravitational-Wave Corridor & Wormhole Mouth B merge
+    new THREE.Vector3(370.0, 0.7, 180.0),
+    new THREE.Vector3(370.0, 0.1, 330.0),
+    // South R = 185m Constant-Radius Banked Return Sweeper (exact 36 deg arc increments!)
+    new THREE.Vector3(334.7, 0.0, 438.7),
+    new THREE.Vector3(242.2, 0.0, 505.9),
+    new THREE.Vector3(127.8, 0.0, 505.9),
+    new THREE.Vector3(35.3, 0.0, 438.7),
   ];
   const groundCurve = new THREE.CatmullRomCurve3(groundPts, true, 'centripetal', 0.45);
 
-  // 2. Expanded Multi-Level Elevated Skyway Expressway (~980m Viaduct & Cable-Stayed Flyover)
+  // 2. Wide-Radius Multi-Level Elevated Skyway Expressway (~1,540m Viaduct & Cable-Stayed Flyover)
   const skywayPts = [
-    new THREE.Vector3(4.6, 0.01, 68.0),     // Seamless start in right lane of Grand Boulevard
-    new THREE.Vector3(8.2, 0.04, 44.0),     // Effortless ~8 deg Y-fork split!
-    new THREE.Vector3(16.2, 2.10, 12.0),    // Smooth 5.5 deg ascent past gore chevrons
-    new THREE.Vector3(24.5, 7.60, -26.0),   // Viaduct climb east of Triumphal Arch
-    new THREE.Vector3(25.0, 14.80, -74.0),  // Level 2 Panorama Viaduct (clears Y=6.8m Bullet Train!)
-    new THREE.Vector3(-12.0, 16.80, -132.0),// High North Flyover
-    new THREE.Vector3(-48.0, 17.60, -70.0), // Level 3 Cable-Stayed High Bridge (17.6m!)
-    new THREE.Vector3(-34.0, 15.10, 14.0),  // West Skyline Overlook
-    new THREE.Vector3(38.0, 12.80, 56.0),   // Soaring Crossover HIGH OVER Grand Boulevard!
-    new THREE.Vector3(114.0, 9.20, 108.0),  // Wide Infield Sweeping Viaduct
-    new THREE.Vector3(106.0, 4.80, 178.0),  // Scenic Curved Descent Ramp
-    new THREE.Vector3(46.0, 1.25, 214.0),   // Smooth Merge Approach
-    new THREE.Vector3(8.5, 0.05, 198.0),    // Forward Merge into Grand Boulevard right lane
-    new THREE.Vector3(4.6, 0.01, 172.0),    // Aligned -Z on South Boulevard Straightaway!
+    new THREE.Vector3(5.4, 0.01, 68.0),     // Seamless start in right lane of Grand Boulevard
+    new THREE.Vector3(9.6, 0.04, 42.0),     // Effortless ~8 deg Y-fork split!
+    new THREE.Vector3(18.5, 2.20, 4.0),     // Smooth ascent past gore chevrons
+    new THREE.Vector3(28.0, 8.20, -40.0),   // Viaduct climb east of Triumphal Arch
+    new THREE.Vector3(32.0, 15.20, -92.0),  // Level 2 Panorama Viaduct (clears Y=6.8m Bullet Train!)
+    new THREE.Vector3(-8.0, 17.20, -188.0), // Wide North-West Panorama Flyover
+    new THREE.Vector3(-74.0, 18.00, -88.0), // Level 3 Cable-Stayed High Bridge (18.0m!)
+    new THREE.Vector3(-54.0, 15.40, 22.0),  // West Overlook above Kerr Black Hole Basin!
+    new THREE.Vector3(44.0, 12.80, 96.0),   // Soaring Crossover HIGH OVER Grand Boulevard!
+    new THREE.Vector3(168.0, 9.50, 172.0),  // Wide Infield Sweeping Viaduct
+    new THREE.Vector3(158.0, 5.00, 276.0),  // Gentle Curved Descent Ramp
+    new THREE.Vector3(64.0, 1.35, 324.0),   // Smooth Merge Approach
+    new THREE.Vector3(9.8, 0.05, 296.0),    // Forward Merge into Grand Boulevard right lane
+    new THREE.Vector3(5.4, 0.01, 262.0),    // Aligned -Z well south of Starting Grid!
   ];
   const skywayCurve = new THREE.CatmullRomCurve3(skywayPts, false, 'centripetal', 0.45);
 
-  const groundData = sampleRibbonFrames(groundCurve, 1.25, true, 1.0);
-  const skywayData = sampleRibbonFrames(skywayCurve, 1.20, false, 1.15);
+  const groundData = sampleRibbonFrames(groundCurve, 1.65, true, 1.0);
+  const skywayData = sampleRibbonFrames(skywayCurve, 1.55, false, 1.15);
 
-  // --- Build Ground Grand Prix Road Mesh (16.0m wide, 9 lateral vertices for smooth aberration!) ---
+  // --- Build Ground Grand Prix Road Mesh (19.0m wide, 9 lateral vertices for generous high-speed playability!) ---
   const roadProfile = [];
-  const roadHalfW = 8.0;
+  const roadHalfW = 9.5;
   for (let i = 0; i <= 8; i++) {
     const t = i / 8;
     const lat = -roadHalfW + t * (2.0 * roadHalfW);
@@ -213,29 +221,29 @@ export function createTrackSystem(materials, shaderSystem) {
       let curbH = 0.15;
 
       // Flush curb at Skyway On-Ramp Y-Fork & Off-Ramp Merge on East (+1) side of main straight
-      if (sideSign > 0 && Math.abs(x) < 12.0) {
-        if ((z >= 8.0 && z <= 72.0) || (z >= 166.0 && z <= 212.0)) {
+      if (sideSign > 0 && Math.abs(x) < 14.0) {
+        if ((z >= 2.0 && z <= 72.0) || (z >= 254.0 && z <= 316.0)) {
           curbH = 0.005;
         }
       }
       // Flush / gentle curb at Clock Tower Plaza West (-1) entrance (Z in [-60..-18])
       // AND at the Black Hole Slingshot Bypass Lane West (-1) entrance/exit (Z in [4..112])!
-      if (sideSign < 0 && Math.abs(x) < 10.5) {
+      if (sideSign < 0 && Math.abs(x) < 12.5) {
         if (z >= -60.0 && z <= -18.0) curbH = 0.04;
         if (z >= 4.0 && z <= 112.0) curbH = 0.005;
       }
-      // Flush curb at North Boulevard Wormhole Mouth A approach (Z in [-156..-122])
-      // and East Skyline Wormhole Mouth B merge (X > 185, Z in [34..94])
-      if (Math.abs(x) < 14.0 && z >= -156.0 && z <= -122.0) {
+      // Flush curb at North Boulevard Wormhole Mouth A approach (Z in [-302..-248])
+      // and East Skyline Wormhole Mouth B merge (X > 345, Z in [34..102])
+      if (Math.abs(x) < 16.0 && z >= -302.0 && z <= -248.0) {
         curbH = 0.005;
       }
-      if (sideSign > 0 && x > 185.0 && z >= 34.0 && z <= 94.0) {
+      if (sideSign > 0 && x > 345.0 && z >= 34.0 && z <= 102.0) {
         curbH = 0.005;
       }
 
       const lats = sideSign > 0
-        ? [8.0, 8.12, 10.2, 12.4, 12.62, 15.8]
-        : [-15.8, -12.62, -12.4, -10.2, -8.12, -8.0];
+        ? [9.5, 9.62, 11.7, 13.9, 14.12, 17.4]
+        : [-17.4, -14.12, -13.9, -11.7, -9.62, -9.5];
       const ys = sideSign > 0
         ? [0.01, curbH, curbH + 0.02, curbH + 0.03, curbH - 0.05, -2.55]
         : [-2.55, curbH - 0.05, curbH + 0.03, curbH + 0.02, curbH, 0.01];
@@ -297,8 +305,8 @@ export function createTrackSystem(materials, shaderSystem) {
     const flushKerb = (i0, i1, side) => {
       if (i1 - i0 < 5) return;
       const sub = frames.slice(i0, i1 + 1);
-      const inner = side > 0 ? 7.45 : -8.35;
-      const outer = side > 0 ? 8.35 : -7.45;
+      const inner = side > 0 ? 8.95 : -9.85;
+      const outer = side > 0 ? 9.85 : -8.95;
       const prof = [
         [inner, 0.02, 0.0, 0, 1],
         [(inner + outer) * 0.5, 0.07, 0.5, 0, 1],
@@ -312,7 +320,7 @@ export function createTrackSystem(materials, shaderSystem) {
 
     for (let i = 0; i < frames.length; i++) {
       const k = frames[i].signedCurv;
-      const side = Math.abs(k) > 0.0085 ? Math.sign(k) : 0;
+      const side = Math.abs(k) > 0.0040 ? Math.sign(k) : 0;
       if (side !== curSide) {
         if (curSide !== 0 && segStart >= 0) flushKerb(segStart, i - 1, curSide);
         segStart = side !== 0 ? i : -1;
@@ -336,8 +344,8 @@ export function createTrackSystem(materials, shaderSystem) {
     group.add(goreMesh);
   }
 
-  // --- Build Multi-Level Elevated Skyway Deck (12.4m Asphalt + Concrete Box Girder + Twin Jersey Barriers) ---
-  const skyHalfW = 6.2;
+  // --- Build Multi-Level Elevated Skyway Deck (14.8m Asphalt + Concrete Box Girder + Twin Jersey Barriers) ---
+  const skyHalfW = 7.4;
   const skyAsphaltProf = [];
   for (let i = 0; i <= 6; i++) {
     const t = i / 6;
@@ -364,30 +372,30 @@ export function createTrackSystem(materials, shaderSystem) {
 
     // Left Jersey Barrier
     const leftBarrierProf = [
-      [-6.85, -0.35, 0.0, -1, 0],
-      [-6.85, 0.96, 0.25, -0.3, 0.95],
-      [-6.35, 0.96, 0.50, 0.3, 0.95],
-      [-6.12, 0.28, 0.78, 0.85, 0.5],
-      [-6.05, 0.02, 1.0, 0.7, 0.7],
+      [-8.05, -0.35, 0.0, -1, 0],
+      [-8.05, 0.96, 0.25, -0.3, 0.95],
+      [-7.55, 0.96, 0.50, 0.3, 0.95],
+      [-7.32, 0.28, 0.78, 0.85, 0.5],
+      [-7.25, 0.02, 1.0, 0.7, 0.7],
     ];
     // Right Jersey Barrier
     const rightBarrierProf = [
-      [6.05, 0.02, 0.0, -0.7, 0.7],
-      [6.12, 0.28, 0.22, -0.85, 0.5],
-      [6.35, 0.96, 0.50, -0.3, 0.95],
-      [6.85, 0.96, 0.75, 0.3, 0.95],
-      [6.85, -0.35, 1.0, 1, 0],
+      [7.25, 0.02, 0.0, -0.7, 0.7],
+      [7.32, 0.28, 0.22, -0.85, 0.5],
+      [7.55, 0.96, 0.50, -0.3, 0.95],
+      [8.05, 0.96, 0.75, 0.3, 0.95],
+      [8.05, -0.35, 1.0, 1, 0],
     ];
     // Underside Box-Girder Spine (ordered +X -> -X so outward normals face downward -Y!)
     const girderFrames = frames.filter((f) => f.s >= 32.0 && f.s <= totalS - 32.0);
     const girderProf = [
-      [6.85, -0.02, 0.0, 1, 0],
-      [6.85, -0.48, 0.15, 0.6, -0.8],
-      [4.20, -1.35, 0.35, 0.3, -0.95],
+      [8.05, -0.02, 0.0, 1, 0],
+      [8.05, -0.48, 0.15, 0.6, -0.8],
+      [4.95, -1.35, 0.35, 0.3, -0.95],
       [0.0, -1.42, 0.50, 0, -1],
-      [-4.20, -1.35, 0.65, -0.3, -0.95],
-      [-6.85, -0.48, 0.85, -0.6, -0.8],
-      [-6.85, -0.02, 1.0, -1, 0],
+      [-4.95, -1.35, 0.65, -0.3, -0.95],
+      [-8.05, -0.48, 0.85, -0.6, -0.8],
+      [-8.05, -0.02, 1.0, -1, 0],
     ];
 
     for (const [subFrames, prof] of [
@@ -414,7 +422,7 @@ export function createTrackSystem(materials, shaderSystem) {
       [18.0, 4.6],
       [-48.0, 4.6],
     ]) {
-      const cwGeo = new THREE.PlaneGeometry(15.2, lengthZ, 30, 12);
+      const cwGeo = new THREE.PlaneGeometry(18.2, lengthZ, 30, 12);
       cwGeo.rotateX(-Math.PI * 0.5);
       cwGeo.translate(0.0, 0.058, cz);
       cwGeo.setAttribute('uv1', cwGeo.getAttribute('uv'));
@@ -427,8 +435,8 @@ export function createTrackSystem(materials, shaderSystem) {
 
   // --- Scenic Infield Reflecting Lagoons & Sand Traps (natural off-road shortcut hazards!) ---
   const lagoons = [
-    { cx: 122.0, cz: -58.0, waterRX: 21.0, waterRZ: 28.0, sandRX: 27.5, sandRZ: 34.5 },
-    { cx: 146.0, cz: 132.0, waterRX: 18.0, waterRZ: 23.0, sandRX: 24.0, sandRZ: 29.0 },
+    { cx: 185.0, cz: -145.0, waterRX: 32.0, waterRZ: 44.0, sandRX: 41.0, sandRZ: 53.0 },
+    { cx: 225.0, cz: 185.0, waterRX: 28.0, waterRZ: 38.0, sandRX: 36.0, sandRZ: 46.0 },
   ];
 
   // --- Spatial Hash Grid (`16m x 16m`) for Fast Exact Surface, Solid Obstacle & Skyway Barrier Queries ---
@@ -499,18 +507,18 @@ export function createTrackSystem(materials, shaderSystem) {
 
       if (deckType === 'ground') {
         // Open Free-Roam! Zero invisible corridor walls along the ground circuit!
-        leftLimit = 12.4;
-        rightLimit = 12.4;
+        leftLimit = 14.0;
+        rightLimit = 14.0;
       } else if (deckType === 'skyway') {
         // Elevated Skyway has real physical concrete Jersey barriers where s in [18 .. totalLen - 18]
-        leftLimit = 6.05;
-        rightLimit = 6.05;
+        leftLimit = 7.25;
+        rightLimit = 7.25;
         if (a.s >= 18.0 && a.s <= totalLen - 18.0) {
           hasLeftWall = true;
           hasRightWall = true;
         } else {
-          leftLimit = 8.5;
-          rightLimit = 8.5;
+          leftLimit = 9.5;
+          rightLimit = 9.5;
         }
       }
 
@@ -529,7 +537,7 @@ export function createTrackSystem(materials, shaderSystem) {
       };
       segments.push(seg);
 
-      const pad = (deckType === 'ground' ? 16.2 : Math.max(leftLimit, rightLimit)) + 3.0;
+      const pad = (deckType === 'ground' ? 18.0 : Math.max(leftLimit, rightLimit)) + 3.0;
       const minCX = Math.floor((Math.min(ax, bx) - pad) / CELL_SIZE);
       const maxCX = Math.floor((Math.max(ax, bx) + pad) / CELL_SIZE);
       const minCZ = Math.floor((Math.min(az, bz) - pad) / CELL_SIZE);
@@ -582,9 +590,9 @@ export function createTrackSystem(materials, shaderSystem) {
 
   const wormholeACurve = new THREE.CatmullRomCurve3(
     [
-      new THREE.Vector3(-1.5, 0.015, -124.0),
-      new THREE.Vector3(-3.8, 0.02, -138.0),
-      new THREE.Vector3(-5.0, 0.02, -158.0),
+      new THREE.Vector3(-1.8, 0.015, -254.0),
+      new THREE.Vector3(-4.2, 0.02, -272.0),
+      new THREE.Vector3(-5.5, 0.02, -296.0),
     ],
     false,
     'centripetal',
@@ -594,9 +602,9 @@ export function createTrackSystem(materials, shaderSystem) {
 
   const wormholeBCurve = new THREE.CatmullRomCurve3(
     [
-      new THREE.Vector3(200.5, 1.18, 44.0),
-      new THREE.Vector3(203.5, 1.05, 62.0),
-      new THREE.Vector3(211.5, 0.78, 86.0),
+      new THREE.Vector3(360.0, 1.28, 48.0),
+      new THREE.Vector3(364.2, 1.18, 68.0),
+      new THREE.Vector3(369.0, 1.02, 98.0),
     ],
     false,
     'centripetal',
@@ -664,28 +672,28 @@ export function createTrackSystem(materials, shaderSystem) {
       const sf = sFrames[i];
       if (sf.s < 28.0 || sf.s > skywayData.totalLen - 28.0) continue;
       if (sf.pos.y < 0.85 || sf.pos.y >= 3.15) continue;
-      if (minDistToRibbon2D(sf.pos.x, sf.pos.z, 'ground').dist < 9.4) continue;
+      if (minDistToRibbon2D(sf.pos.x, sf.pos.z, 'ground').dist < 11.2) continue;
       const yaw = Math.atan2(sf.tan.x, -sf.tan.z);
-      registerSolidBox(sf.pos.x, sf.pos.z, 6.85, 2.25, yaw, sf.pos.y - 0.85);
+      registerSolidBox(sf.pos.x, sf.pos.z, 8.05, 2.4, yaw, sf.pos.y - 0.85);
     }
   }
 
   // --- Build Concrete Viaduct Piers & Tokyo-Expressway Portal Straddle Bents ---
   {
     const frames = skywayData.frames;
-    let nextPierS = 38.0;
+    let nextPierS = 42.0;
     for (let i = 0; i < frames.length; i++) {
       const f = frames[i];
-      if (f.s < nextPierS || f.s > skywayData.totalLen - 34.0) continue;
+      if (f.s < nextPierS || f.s > skywayData.totalLen - 38.0) continue;
       if (f.pos.y < 2.6) continue;
-      nextPierS = f.s + 28.0;
+      nextPierS = f.s + 32.0;
 
       const groundCheck = minDistToRibbon2D(f.pos.x, f.pos.z, 'ground');
       const beamY = f.pos.y - 1.42;
 
-      if (groundCheck.dist < 14.5) {
+      if (groundCheck.dist < 16.5) {
         // Straddle Portal Bent spanning wide outside any ground road below!
-        const spanHalf = 14.8;
+        const spanHalf = 16.8;
         const capGeo = new THREE.BoxGeometry(spanHalf * 2 + 2.2, 1.15, 2.2, 8, 1, 1);
         capGeo.setAttribute('uv1', capGeo.getAttribute('uv'));
         const cap = new THREE.Mesh(capGeo, materials.highwayConcrete);
@@ -699,7 +707,7 @@ export function createTrackSystem(materials, shaderSystem) {
         for (const side of [-1, 1]) {
           const px = f.pos.x + f.right.x * side * spanHalf;
           const pz = f.pos.z + f.right.z * side * spanHalf;
-          if (minDistToRibbon2D(px, pz, 'ground').dist < 10.5) continue;
+          if (minDistToRibbon2D(px, pz, 'ground').dist < 12.2) continue;
           const colH = beamY;
           const colGeo = new THREE.BoxGeometry(1.75, colH, 1.95, 1, Math.max(2, Math.ceil(colH / 2.5)), 1);
           colGeo.setAttribute('uv1', colGeo.getAttribute('uv'));
@@ -741,10 +749,10 @@ export function createTrackSystem(materials, shaderSystem) {
   // --- Overhead Tokyo-Expressway Steel Highway Gantry at Y-Fork Entrance (Z = +62) ---
   {
     const gantryZ = 62.0;
-    const spanW = 24.4;
+    const spanW = 28.0;
     const gantryY = 7.4;
 
-    for (const sx of [-11.4, 12.8]) {
+    for (const sx of [-13.2, 14.6]) {
       const postGeo = new THREE.CylinderGeometry(0.32, 0.38, gantryY + 1.0, 10, 4);
       const post = new THREE.Mesh(postGeo, materials.brushedSteel);
       post.position.set(sx, (gantryY + 1.0) * 0.5, gantryZ);
@@ -774,11 +782,11 @@ export function createTrackSystem(materials, shaderSystem) {
     group.add(signR);
   }
 
-  // --- Cable-Stayed High Skyway Suspension Tower at West Peak (X = -48, Z = -70, Deck Y = 17.6m) ---
+  // --- Cable-Stayed High Skyway Suspension Tower at West Peak (X = -74, Z = -88, Deck Y = 18.0m) ---
   {
-    const towerCenter = new THREE.Vector3(-48.0, 0.0, -70.0);
-    const towerH = 46.0;
-    const legSpread = 9.2;
+    const towerCenter = new THREE.Vector3(-74.0, 0.0, -88.0);
+    const towerH = 48.0;
+    const legSpread = 13.6;
 
     for (const side of [-1, 1]) {
       const legGeo = new THREE.CylinderGeometry(0.75, 1.35, towerH, 12, 12);
@@ -794,7 +802,7 @@ export function createTrackSystem(materials, shaderSystem) {
     }
 
     for (const crossY of [15.5, 29.0, 41.5]) {
-      const crossW = Math.max(4.5, legSpread * 1.4 * (1.0 - crossY / 95.0));
+      const crossW = Math.max(5.5, legSpread * 1.4 * (1.0 - crossY / 95.0));
       const beam = new THREE.Mesh(
         new THREE.BoxGeometry(crossW, 1.3, 1.5, 6, 1, 1),
         materials.stayCableWhite
@@ -805,18 +813,28 @@ export function createTrackSystem(materials, shaderSystem) {
       group.add(beam);
     }
 
+    let towerS = 450.0;
+    let bestTowerD2 = Infinity;
+    for (const sf of skywayData.frames) {
+      const d2 = (sf.pos.x - towerCenter.x) ** 2 + (sf.pos.z - towerCenter.z) ** 2;
+      if (d2 < bestTowerD2) {
+        bestTowerD2 = d2;
+        towerS = sf.s;
+      }
+    }
+
     // Taut steel stay cables fanning down to the Skyway viaduct (bend dramatically under aberration!)
-    const anchorTop = new THREE.Vector3(towerCenter.x, 42.5, towerCenter.z);
-    for (const ds of [-54, -40, -26, -14, 14, 26, 40, 54]) {
-      const targetS = THREE.MathUtils.clamp(315.0 + ds, 40.0, skywayData.totalLen - 40.0);
+    const anchorTop = new THREE.Vector3(towerCenter.x, 44.0, towerCenter.z);
+    for (const ds of [-58, -42, -28, -14, 14, 28, 42, 58]) {
+      const targetS = THREE.MathUtils.clamp(towerS + ds, 40.0, skywayData.totalLen - 40.0);
       const u = targetS / skywayData.totalLen;
       const deckPt = skywayCurve.getPointAt(u);
       const tan = skywayCurve.getTangentAt(u);
       const right = new THREE.Vector3().crossVectors(tan, UP).normalize();
 
       for (const side of [-1, 1]) {
-        const p0 = anchorTop.clone().add(new THREE.Vector3(side * 2.8, 0, 0));
-        const p1 = deckPt.clone().addScaledVector(right, side * 6.5).add(new THREE.Vector3(0, 0.9, 0));
+        const p0 = anchorTop.clone().add(new THREE.Vector3(side * 3.4, 0, 0));
+        const p1 = deckPt.clone().addScaledVector(right, side * 7.6).add(new THREE.Vector3(0, 0.9, 0));
         const diff = new THREE.Vector3().subVectors(p1, p0);
         const len = diff.length();
         const cableGeo = new THREE.CylinderGeometry(0.065, 0.065, len, 6, 18);
@@ -918,30 +936,30 @@ export function createTrackSystem(materials, shaderSystem) {
           const absLat = Math.abs(lat);
 
           if (s.deckType === 'ground') {
-            if (absLat > 15.8) continue;
+            if (absLat > 17.4) continue;
             const roadY = s.ay + (s.by - s.ay) * t - Math.sin(s.bank) * lat;
             let segY = roadY;
             let segTerrain = 'road';
             let segBank = s.bank;
 
-            if (absLat > 8.08) {
+            if (absLat > 9.58) {
               const isFlushRamp =
                 (lat > 0 &&
-                  Math.abs(px) < 13.0 &&
-                  ((pz >= 8.0 && pz <= 72.0) || (pz >= 166.0 && pz <= 212.0))) ||
-                (lat > 0 && px > 185.0 && pz >= 34.0 && pz <= 94.0) ||
-                (lat < 0 && Math.abs(px) < 12.0 && pz >= 4.0 && pz <= 112.0) ||
-                (Math.abs(px) < 14.0 && pz >= -156.0 && pz <= -122.0);
+                  Math.abs(px) < 14.5 &&
+                  ((pz >= 2.0 && pz <= 72.0) || (pz >= 254.0 && pz <= 316.0))) ||
+                (lat > 0 && px > 345.0 && pz >= 34.0 && pz <= 102.0) ||
+                (lat < 0 && Math.abs(px) < 13.5 && pz >= 4.0 && pz <= 112.0) ||
+                (Math.abs(px) < 16.0 && pz >= -302.0 && pz <= -248.0);
               const isPlazaEdge =
-                lat < 0 && Math.abs(px) < 10.5 && pz >= -60.0 && pz <= -18.0;
+                lat < 0 && Math.abs(px) < 12.5 && pz >= -60.0 && pz <= -18.0;
               const curbH = isFlushRamp ? 0.005 : isPlazaEdge ? 0.04 : 0.15;
 
-              if (absLat <= 12.62) {
+              if (absLat <= 14.12) {
                 segY = roadY + (isFlushRamp ? 0.0 : curbH - 0.01);
                 segTerrain = isFlushRamp ? 'road' : 'sidewalk';
               } else {
-                // Continuous sloped outer stone embankment (`12.62m -> 15.8m`) matching `buildSidewalkSide`!
-                const uSlope = (absLat - 12.62) / (15.8 - 12.62);
+                // Continuous sloped outer stone embankment (`14.12m -> 17.4m`) matching `buildSidewalkSide`!
+                const uSlope = (absLat - 14.12) / (17.4 - 14.12);
                 const topEmbankY = roadY + curbH - 0.05;
                 const botEmbankY = roadY - 2.55;
                 segY = topEmbankY + (botEmbankY - topEmbankY) * uSlope;
@@ -967,7 +985,7 @@ export function createTrackSystem(materials, shaderSystem) {
               groundTerrain = 'road';
             }
           } else if (s.deckType === 'skyway') {
-            if (absLat > 6.65) continue;
+            if (absLat > 7.85) continue;
             const deckY = s.ay + (s.by - s.ay) * t - Math.sin(s.bank) * lat;
             if (deckY > skyBestY) {
               skyBestY = deckY;
@@ -995,10 +1013,10 @@ export function createTrackSystem(materials, shaderSystem) {
    * Point-vs-world collision query (used by Chase Camera anti-clipping & AI disturbed slide).
    */
   function queryBarrierContact(x, footY, z) {
-    if (x < -410.0) return { hit: true, pen: -410.0 - x, nx: 1, nz: 0 };
-    if (x > 410.0) return { hit: true, pen: x - 410.0, nx: -1, nz: 0 };
-    if (z < -410.0) return { hit: true, pen: -410.0 - z, nx: 0, nz: 1 };
-    if (z > 410.0) return { hit: true, pen: z - 410.0, nx: 0, nz: -1 };
+    if (x < -680.0) return { hit: true, pen: -680.0 - x, nx: 1, nz: 0 };
+    if (x > 680.0) return { hit: true, pen: x - 680.0, nx: -1, nz: 0 };
+    if (z < -680.0) return { hit: true, pen: -680.0 - z, nx: 0, nz: 1 };
+    if (z > 680.0) return { hit: true, pen: z - 680.0, nx: 0, nz: -1 };
 
     const cx = Math.floor(x / CELL_SIZE);
     const cz = Math.floor(z / CELL_SIZE);
@@ -1114,13 +1132,13 @@ export function createTrackSystem(materials, shaderSystem) {
       }
     };
 
-    // 1. Outer park safety boundary (`+/-410m`)
+    // 1. Outer park safety boundary (`+/-680m`)
     const extX = Math.abs(rx) * halfW + Math.abs(fx) * halfL;
     const extZ = Math.abs(rz) * halfW + Math.abs(fz) * halfL;
-    if (carX - extX < -410.0) recordHit(-410.0 - (carX - extX), 1, 0, -410.0, carZ);
-    if (carX + extX > 410.0) recordHit((carX + extX) - 410.0, -1, 0, 410.0, carZ);
-    if (carZ - extZ < -410.0) recordHit(-410.0 - (carZ - extZ), 0, 1, carX, -410.0);
-    if (carZ + extZ > 410.0) recordHit((carZ + extZ) - 410.0, 0, -1, carX, 410.0);
+    if (carX - extX < -680.0) recordHit(-680.0 - (carX - extX), 1, 0, -680.0, carZ);
+    if (carX + extX > 680.0) recordHit((carX + extX) - 680.0, -1, 0, 680.0, carZ);
+    if (carZ - extZ < -680.0) recordHit(-680.0 - (carZ - extZ), 0, 1, carX, -680.0);
+    if (carZ + extZ > 680.0) recordHit((carZ + extZ) - 680.0, 0, -1, carX, 680.0);
 
     // 2. Elevated Skyway concrete Jersey barriers (test 4 OBB corners + side midpoints)
     if (footY > 1.65) {

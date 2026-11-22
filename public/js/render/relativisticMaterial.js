@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { computeCalibratedSpectralMatrix, buildSpectralLUTData, getSpectralGLSL } from '../physics/spectral.js?v=2.1';
+import { computeCalibratedSpectralMatrix, buildSpectralLUTData, getSpectralGLSL } from '../physics/spectral.js?v=2.2';
 
 function createSpectralLUTTexture() {
   const { width, height, floats } = buildSpectralLUTData();
@@ -61,10 +61,10 @@ export class RelativisticShaderSystem {
       uBHPos: { value: new THREE.Vector3(-36.0, 1.90, 54.0) },
       uBHRs: { value: 3.50 },
       uObsGravAlpha: { value: 1.0 },
-      uWormholeAPos: { value: new THREE.Vector3(-5.0, 2.55, -150.0) },
-      uWormholeBPos: { value: new THREE.Vector3(201.0, 3.45, 54.0) },
+      uWormholeAPos: { value: new THREE.Vector3(-5.5, 2.55, -288.0) },
+      uWormholeBPos: { value: new THREE.Vector3(360.5, 3.45, 60.0) },
       uWormholeR: { value: 4.2 },
-      uGWPos: { value: new THREE.Vector3(275.0, 52.0, 28.0) },
+      uGWPos: { value: new THREE.Vector3(445.0, 56.0, 34.0) },
 
       // Atmospheric / Time-of-Day uniforms shared with Sky & PMREM env cubemap
       uSunDir: { value: new THREE.Vector3(0.45, 0.72, 0.52).normalize() },

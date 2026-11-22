@@ -2,16 +2,16 @@
  * Relativistic Grand Prix — Main Game Loop, Rest-Frame Radar & Twin-Paradox Race Manager
  */
 
-import { ObserverState, GeneralRelativityMetric } from './physics/spacetime.js?v=2.1';
-import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=2.1';
-import { VehicleController } from './physics/vehicle.js?v=2.1';
-import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=2.1';
-import { buildPBRMaterialLibrary } from './render/textures.js?v=2.1';
-import { buildCityWorld } from './world/cityBuilder.js?v=2.1';
-import { EntityManager } from './world/entities.js?v=2.1';
-import { GeneralRelativitySystem } from './world/generalRelativity.js?v=2.1';
-import { RelativisticRenderer } from './render/renderer.js?v=2.1';
-import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=2.1';
+import { ObserverState, GeneralRelativityMetric } from './physics/spacetime.js?v=2.2';
+import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=2.2';
+import { VehicleController } from './physics/vehicle.js?v=2.2';
+import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=2.2';
+import { buildPBRMaterialLibrary } from './render/textures.js?v=2.2';
+import { buildCityWorld } from './world/cityBuilder.js?v=2.2';
+import { EntityManager } from './world/entities.js?v=2.2';
+import { GeneralRelativitySystem } from './world/generalRelativity.js?v=2.2';
+import { RelativisticRenderer } from './render/renderer.js?v=2.2';
+import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=2.2';
 
 function formatClock(seconds) {
   const s = Math.max(0, seconds);
@@ -103,7 +103,7 @@ function createRelativisticRadar(canvas, titleEl, toggleBtn, cityWorld, metric) 
 
     const radarCX = W * 0.5;
     const radarCY = viewerFrame ? H * 0.58 : H * 0.5;
-    const viewerScale = 0.40; // pixels per rest-frame meter
+    const viewerScale = 0.28; // pixels per rest-frame meter (shows generous horizon on 2,360m circuit!)
 
     const projectPt = (wx, wz) => {
       if (!viewerFrame) {
@@ -129,7 +129,7 @@ function createRelativisticRadar(canvas, titleEl, toggleBtn, cityWorld, metric) 
     if (viewerFrame) {
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.13)';
       ctx.lineWidth = 1;
-      for (const rMeters of [60, 120]) {
+      for (const rMeters of [90, 180]) {
         ctx.beginPath();
         ctx.arc(radarCX, radarCY, rMeters * viewerScale, 0, Math.PI * 2);
         ctx.stroke();
@@ -231,7 +231,7 @@ function createRelativisticRadar(canvas, titleEl, toggleBtn, cityWorld, metric) 
 
       // Gravitational-Wave Corridor wavefront arcs on East Skyline
       if (metric.gwPos) {
-        const [gwX, gwY] = projectPt(212.0, 38.0);
+        const [gwX, gwY] = projectPt(370.0, 38.0);
         ctx.strokeStyle = 'rgba(168, 85, 247, 0.58)';
         ctx.lineWidth = 1.4;
         for (const rArc of [5.5, 9.5]) {
@@ -242,9 +242,9 @@ function createRelativisticRadar(canvas, titleEl, toggleBtn, cityWorld, metric) 
       }
     }
 
-    // Start / Finish Chequered Line Bar at Z = +94, X in [-8..+8]
-    const [sfLx, sfLy] = projectPt(-8.5, 94.0);
-    const [sfRx, sfRy] = projectPt(8.5, 94.0);
+    // Start / Finish Chequered Line Bar at Z = +94, X in [-9.5..+9.5]
+    const [sfLx, sfLy] = projectPt(-9.6, 94.0);
+    const [sfRx, sfRy] = projectPt(9.6, 94.0);
     ctx.strokeStyle = '#facc15';
     ctx.lineWidth = 2.6;
     ctx.beginPath();
@@ -419,7 +419,7 @@ async function init() {
     observer.event[0] = 0.0;
     observer.properTime = 0.0;
     vehicle.boostEnergy = 1.0;
-    vehicle.teleportTo(2.4, 0.02, 158.0, 0.0);
+    vehicle.teleportTo(2.8, 0.02, 192.0, 0.0);
     entities.resetOpponentsForNewRace();
 
     raceState.startCoordTime = observer.event[0];
@@ -577,7 +577,7 @@ async function init() {
     audio.update(dtReal, observer, vehicle, entities, renderer.settings);
 
     // Check Player Lap Progression across Start/Finish (Z = +94, including Black Hole Slingshot Bypass lane!)
-    if (!raceState.playerHasCrossedStart && vehicle.footY < 2.5 && vehicle.carX > -17.5 && vehicle.carX < 12.5 && prevCarZ > 94.0 && vehicle.carZ <= 94.0) {
+    if (!raceState.playerHasCrossedStart && vehicle.footY < 2.5 && vehicle.carX > -18.5 && vehicle.carX < 14.5 && prevCarZ > 94.0 && vehicle.carZ <= 94.0) {
       raceState.playerHasCrossedStart = true;
     }
     if (vehicle.carZ < -35.0 || vehicle.footY > 8.0) {
@@ -588,8 +588,8 @@ async function init() {
       raceState.mode === 'racing' &&
       raceState.playerPassedMidpoint &&
       vehicle.footY < 2.5 &&
-      vehicle.carX > -17.5 &&
-      vehicle.carX < 12.5 &&
+      vehicle.carX > -18.5 &&
+      vehicle.carX < 14.5 &&
       prevCarZ > 94.0 &&
       vehicle.carZ <= 94.0
     ) {
@@ -830,7 +830,7 @@ function bindUI(metric, vehicle, entities, renderer, audio, startNewGrandPrix, r
     if (window.__relativityApp?.grSystem?.inThroat) {
       window.__relativityApp.grSystem._exitWormholeThroat(vehicle, entities, window.__relativityApp.cityWorld, renderer.skyMesh, false);
     }
-    vehicle.teleportTo(-2.2, 0.02, -116.0, -0.082);
+    vehicle.teleportTo(-2.4, 0.02, -242.0, -0.068);
     physicsDrawer?.classList.add('hidden');
     togglePhysicsBtn?.classList.remove('active');
   });
@@ -840,12 +840,12 @@ function bindUI(metric, vehicle, entities, renderer, audio, startNewGrandPrix, r
     if (window.__relativityApp?.grSystem?.inThroat) {
       window.__relativityApp.grSystem._exitWormholeThroat(vehicle, entities, cw, renderer.skyMesh, false);
     }
-    let gx = 209.5, gy = 1.72, gz = -34.0, gyaw = -3.01;
+    let gx = 370.0, gy = 1.62, gz = -72.0, gyaw = Math.PI;
     if (cw?.track?.groundData?.frames) {
       let bestD = Infinity;
       for (const f of cw.track.groundData.frames) {
-        if (f.pos.x < 180.0) continue;
-        const d = Math.abs(f.pos.z - (-34.0));
+        if (f.pos.x < 320.0) continue;
+        const d = Math.abs(f.pos.z - (-72.0));
         if (d < bestD) {
           bestD = d;
           gx = f.pos.x; gy = f.pos.y + 0.03; gz = f.pos.z;

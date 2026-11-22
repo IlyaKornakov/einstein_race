@@ -19,8 +19,8 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { createTrackSystem } from './trackBuilder.js?v=2.1';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.1';
+import { createTrackSystem } from './trackBuilder.js?v=2.2';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.2';
 
 const _mat4 = new THREE.Matrix4();
 const _quat = new THREE.Quaternion();
@@ -176,8 +176,8 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // Surrounding Park Lawn Ground Plane (with sculpted basins for the Infield Reflecting Lagoons!)
   {
-    const parkSegs = IS_MOBILE_DEVICE ? 84 : 160;
-    const groundGeo = new THREE.PlaneGeometry(980, 980, parkSegs, parkSegs);
+    const parkSegs = IS_MOBILE_DEVICE ? 88 : 168;
+    const groundGeo = new THREE.PlaneGeometry(1560, 1560, parkSegs, parkSegs);
     groundGeo.rotateX(-Math.PI * 0.5);
     const pos = groundGeo.getAttribute('position');
     const uv = groundGeo.getAttribute('uv');
@@ -192,7 +192,7 @@ export function buildCityWorld(materials, shaderSystem) {
         }
       }
       pos.setY(i, vy);
-      uv.setXY(i, uv.getX(i) * 120.0, uv.getY(i) * 120.0);
+      uv.setXY(i, uv.getX(i) * 185.0, uv.getY(i) * 185.0);
     }
     groundGeo.computeVertexNormals();
     groundGeo.setAttribute('uv1', uv.clone());
@@ -287,14 +287,14 @@ export function buildCityWorld(materials, shaderSystem) {
 
   function isFootprintClear(cx, cz, radius) {
     // Keep Black Hole Singularity Basin & Slingshot Bypass Loop clear!
-    if (cx > -66.0 - radius && cx < -4.0 + radius && cz > 0.0 - radius && cz < 114.0 + radius) {
+    if (cx > -68.0 - radius && cx < -4.0 + radius && cz > 0.0 - radius && cz < 114.0 + radius) {
       return false;
     }
-    // Keep Morris–Thorne Wormhole Mouth A (-5, -150) & Mouth B (201, 54) clear!
-    if (Math.hypot(cx - (-5.0), cz - (-150.0)) < 19.0 + radius) {
+    // Keep Morris–Thorne Wormhole Mouth A (-5.5, -288) & Mouth B (360.5, 60) clear!
+    if (Math.hypot(cx - (-5.5), cz - (-288.0)) < 22.0 + radius) {
       return false;
     }
-    if (Math.hypot(cx - 201.0, cz - 54.0) < 19.0 + radius) {
+    if (Math.hypot(cx - 360.5, cz - 60.0) < 22.0 + radius) {
       return false;
     }
     // Keep Clock Tower Plaza open
@@ -302,31 +302,31 @@ export function buildCityWorld(materials, shaderSystem) {
       return false;
     }
     // Keep Ferris Wheel Plaza clear
-    if (Math.hypot(cx - 52.0, cz - (-94.0)) < 16.0 + radius) {
+    if (Math.hypot(cx - 56.0, cz - (-94.0)) < 17.5 + radius) {
       return false;
     }
     // Keep Cable-Stayed Bridge Tower pad clear
-    if (Math.hypot(cx - (-48.0), cz - (-70.0)) < 13.5 + radius) {
+    if (Math.hypot(cx - (-74.0), cz - (-88.0)) < 16.0 + radius) {
       return false;
     }
-    // Keep Infield Horse Meadow clear (`(56, 82)`)
-    if (Math.hypot(cx - 56.0, cz - 82.0) < 19.5 + radius) {
+    // Keep Infield Horse Meadow clear (`(95, 110)`)
+    if (Math.hypot(cx - 95.0, cz - 110.0) < 22.0 + radius) {
       return false;
     }
     // Keep Infield Reflecting Lagoons & Sand Traps clear
     for (const lg of track.lagoons) {
-      const rx = lg.sandRX + radius + 2.5;
-      const rz = lg.sandRZ + radius + 2.5;
+      const rx = lg.sandRX + radius + 3.0;
+      const rz = lg.sandRZ + radius + 3.0;
       if (((cx - lg.cx) / rx) ** 2 + ((cz - lg.cz) / rz) ** 2 < 1.0) {
         return false;
       }
     }
     // Keep Bullet Train Viaduct corridor (Z = -78) clear
-    if (Math.abs(cz - (-78.0)) < 5.8 + radius) {
+    if (Math.abs(cz - (-78.0)) < 6.2 + radius) {
       return false;
     }
-    if (track.minDistToRibbon2D(cx, cz, 'ground').dist < 12.8 + radius) return false;
-    if (track.minDistToRibbon2D(cx, cz, 'skyway').dist < 8.6 + radius) return false;
+    if (track.minDistToRibbon2D(cx, cz, 'ground').dist < 14.8 + radius) return false;
+    if (track.minDistToRibbon2D(cx, cz, 'skyway').dist < 10.2 + radius) return false;
     return true;
   }
 
@@ -473,12 +473,12 @@ export function buildCityWorld(materials, shaderSystem) {
   const frames = track.groundData.frames;
   let styleCounter = 0;
 
-  for (let i = 0; i < frames.length; i += 16) {
+  for (let i = 0; i < frames.length; i += 20) {
     const f = frames[i];
     for (const side of [-1, 1]) {
       const bWidth = 12.5 + ((styleCounter * 7) % 5) * 1.6;
       const bDepth = 11.5 + ((styleCounter * 3) % 4) * 1.4;
-      const setback = 13.4 + bDepth * 0.5 + 1.2;
+      const setback = 15.2 + bDepth * 0.5 + 1.4;
 
       const bx = f.pos.x + f.right.x * side * setback;
       const bz = f.pos.z + f.right.z * side * setback;
@@ -523,8 +523,8 @@ export function buildCityWorld(materials, shaderSystem) {
   // --- 3. Grand Limestone Triumphal Arch (Z = -18, X = 0) ---
   {
     const archZ = -18.0;
-    const pierX = 10.6;
-    const pierW = 4.2, pierD = 6.2, pierH = 12.2;
+    const pierX = 12.4;
+    const pierW = 4.2, pierD = 6.2, pierH = 12.4;
 
     for (const sx of [-pierX, pierX]) {
       track.registerSolidBox(sx, archZ, pierW * 0.5 + 0.35, pierD * 0.5 + 0.35, 0.0, pierH);
@@ -656,15 +656,15 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // --- 5. Grand Prix Chequered Start / Finish Timing Gantry (Z = +94) + 845nm Infrared Speed Gates! ---
   {
-    // Start / Finish Gantry at Z = +94.0 (widened West post to -17.4 so Black Hole Slingshot Bypass is 100% clear!)
+    // Start / Finish Gantry at Z = +94.0 (widened posts [-18.2, +11.8] for 19m road + Slingshot Bypass!)
     const sfZ = 94.0;
-    for (const sx of [-17.4, 10.2]) {
+    for (const sx of [-18.2, 11.8]) {
       track.registerSolidCylinder(sx, sfZ, 0.36, 7.6);
       const col = new THREE.CylinderGeometry(0.28, 0.34, 7.6, 10, 4);
       col.setAttribute('uv1', col.getAttribute('uv'));
       pushTransformed(buckets.brushedSteel, col, sx, 3.8, sfZ);
     }
-    pushTransformed(buckets.darkIron, makeSubdividedBox(28.4, 0.55, 0.55, 0.4, 1.5), -3.6, 7.2, sfZ);
+    pushTransformed(buckets.darkIron, makeSubdividedBox(30.8, 0.55, 0.55, 0.4, 1.5), -3.2, 7.2, sfZ);
 
     const banner = new THREE.Mesh(new THREE.BoxGeometry(14.5, 2.4, 0.22, 18, 4, 1), materials.signStartFinish);
     banner.position.set(0.0, 6.95, sfZ + 0.25);
@@ -681,15 +681,15 @@ export function buildCityWorld(materials, shaderSystem) {
       pushTransformed(buckets.signalGreen525, gLens, lx, 4.95, sfZ + 0.24);
     }
 
-    // 845nm Invisible-at-Rest Near-Infrared Relativistic Speed Gate at Z = +2.0 (widened West post for Slingshot merge!)
+    // 845nm Invisible-at-Rest Near-Infrared Relativistic Speed Gate at Z = +2.0
     const irZ = 2.0;
-    for (const sx of [-13.6, 10.0]) {
+    for (const sx of [-14.8, 11.8]) {
       track.registerSolidCylinder(sx, irZ, 0.32, 7.2);
       const col = new THREE.CylinderGeometry(0.24, 0.30, 7.2, 10, 4);
       col.setAttribute('uv1', col.getAttribute('uv'));
       pushTransformed(buckets.darkIron, col, sx, 3.6, irZ);
     }
-    pushTransformed(buckets.darkIron, makeSubdividedBox(24.2, 0.45, 0.45, 0.4, 1.5), -1.8, 6.8, irZ);
+    pushTransformed(buckets.darkIron, makeSubdividedBox(27.2, 0.45, 0.45, 0.4, 1.5), -1.5, 6.8, irZ);
     const irSign = new THREE.Mesh(new THREE.BoxGeometry(12.6, 2.0, 0.20, 16, 4, 1), materials.signIRDetector);
     irSign.position.set(0.0, 6.85, irZ + 0.22);
     irSign.frustumCulled = false;
@@ -706,7 +706,7 @@ export function buildCityWorld(materials, shaderSystem) {
   // --- 6. Giant 35m Rotating Observation Ferris Wheel ("Relativistic Wheel") at (X = +52, Z = -94) ---
   // Demonstrates GPU-retarded radial spoke bending (t_emit = t_obs - u/c) & limb Doppler shift!
   {
-    const wx = 52.0, wy = 20.5, wz = -94.0;
+    const wx = 56.0, wy = 20.5, wz = -94.0;
     const wheelR = 17.2;
 
     // Static A-frame support legs & boarding platform
@@ -799,8 +799,8 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // --- 7. Twin 38m Skyline 3-Blade Wind Turbines (GPU-Retarded Blade Bending!) ---
   for (const [tx, tz, rotY] of [
-    [258.0, -90.0, -Math.PI * 0.5],
-    [260.0, 56.0, -Math.PI * 0.5],
+    [426.0, -90.0, -Math.PI * 0.5],
+    [428.0, 68.0, -Math.PI * 0.5],
   ]) {
     const hubY = 36.0;
     track.registerSolidCylinder(tx, tz, 1.55, hubY);
@@ -849,16 +849,18 @@ export function buildCityWorld(materials, shaderSystem) {
   const wallClockPoses = [];
   const syncPylons = [];
 
-  // Place Synchronized Clock Pylons every ~82m around the Ground Loop
-  for (let i = 24; i < frames.length; i += 66) {
+  // Place Synchronized Clock Pylons every ~110m around the Ground Loop
+  for (let i = 28; i < frames.length; i += 72) {
     const f = frames[i];
-    const side = (i % 132 === 24) ? -1 : 1;
-    if (side > 0 && Math.abs(f.pos.x) < 12.0 && ((f.pos.z >= 6.0 && f.pos.z <= 72.0) || (f.pos.z >= 166.0 && f.pos.z <= 214.0))) continue;
-    if (side < 0 && Math.abs(f.pos.x) < 12.0 && ((f.pos.z >= -60.0 && f.pos.z <= -18.0) || (f.pos.z >= 2.0 && f.pos.z <= 114.0))) continue;
+    const side = (i % 144 === 28) ? -1 : 1;
+    if (side > 0 && Math.abs(f.pos.x) < 14.5 && ((f.pos.z >= 2.0 && f.pos.z <= 74.0) || (f.pos.z >= 252.0 && f.pos.z <= 318.0))) continue;
+    if (side < 0 && Math.abs(f.pos.x) < 14.5 && ((f.pos.z >= -60.0 && f.pos.z <= -18.0) || (f.pos.z >= 2.0 && f.pos.z <= 114.0))) continue;
+    if (Math.abs(f.pos.x) < 17.0 && f.pos.z >= -304.0 && f.pos.z <= -246.0) continue;
+    if (Math.hypot(f.pos.x - 360.5, f.pos.z - 60.0) < 28.0) continue;
 
-    const px = f.pos.x + f.right.x * side * 9.5;
-    const pz = f.pos.z + f.right.z * side * 9.5;
-    if (track.minDistToRibbon2D(px, pz, 'skyway').dist < 7.0) continue;
+    const px = f.pos.x + f.right.x * side * 11.15;
+    const pz = f.pos.z + f.right.z * side * 11.15;
+    if (track.minDistToRibbon2D(px, pz, 'skyway').dist < 8.5) continue;
     const py = track.getSupportSurface(px, f.pos.y + 1.5, pz).y;
 
     syncPylons.push({ x: px, y: py + 4.65, z: pz });
@@ -886,12 +888,12 @@ export function buildCityWorld(materials, shaderSystem) {
   // Also place Synchronized Optical Beacons & IR-845nm Mileposts along the Multi-Level Skyway!
   const skyFrames = track.skywayData.frames;
   const skyLampPoses = [];
-  for (let i = 45; i < skyFrames.length - 45; i += 36) {
+  for (let i = 45; i < skyFrames.length - 45; i += 38) {
     const sf = skyFrames[i];
     for (const side of [-1, 1]) {
-      const bx = sf.pos.x + sf.right.x * side * 6.55;
+      const bx = sf.pos.x + sf.right.x * side * 7.75;
       const by = sf.pos.y + 0.96;
-      const bz = sf.pos.z + sf.right.z * side * 6.55;
+      const bz = sf.pos.z + sf.right.z * side * 7.75;
 
       // Modern Skyway Light Pole + Cobra-head fixture slot
       const pole = new THREE.CylinderGeometry(0.10, 0.14, 5.2, 8, 4);
@@ -914,18 +916,18 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // Place Classical Terrell-Rotation Statue & Marble Bust Pedestals along Grand Boulevard & Sweeper!
   const colonnadeSpots = [
-    [-9.6, 148.0, Math.PI * 0.5, 'statue'],
-    [9.6, 136.0, -Math.PI * 0.5, 'bust'],
-    [-9.6, 122.0, Math.PI * 0.5, 'statue'],
-    [9.6, 108.0, -Math.PI * 0.5, 'bust'],
-    [9.6, 78.0, -Math.PI * 0.5, 'statue'],
-    [-9.6, -4.0, Math.PI * 0.5, 'statue'],
-    [-9.6, -68.0, Math.PI * 0.5, 'bust'],
-    [10.2, -102.0, -Math.PI * 0.5, 'statue'],
-    [28.0, -206.0, 0.35, 'statue'],
+    [-11.3, 178.0, Math.PI * 0.5, 'statue'],
+    [11.3, 162.0, -Math.PI * 0.5, 'bust'],
+    [-11.3, 144.0, Math.PI * 0.5, 'statue'],
+    [11.3, 112.0, -Math.PI * 0.5, 'bust'],
+    [11.3, 78.0, -Math.PI * 0.5, 'statue'],
+    [-11.3, -4.0, Math.PI * 0.5, 'statue'],
+    [-11.3, -68.0, Math.PI * 0.5, 'bust'],
+    [11.3, -128.0, -Math.PI * 0.5, 'statue'],
+    [11.3, -210.0, -Math.PI * 0.5, 'bust'],
   ];
   for (const [sx, sz, sYaw, kind] of colonnadeSpots) {
-    if (track.minDistToRibbon2D(sx, sz, 'skyway').dist < 7.0) continue;
+    if (track.minDistToRibbon2D(sx, sz, 'skyway').dist < 8.5) continue;
     const baseSurfY = track.getSupportSurface(sx, 1.0, sz).y;
     track.registerSolidBox(sx, sz, 0.92, 0.92, 0.0, baseSurfY + 4.0);
     pushTransformed(buckets.stoneCream, makeSubdividedBox(1.55, 1.70, 1.55, 0.35, 1.0), sx, baseSurfY + 0.75, sz);
@@ -937,16 +939,16 @@ export function buildCityWorld(materials, shaderSystem) {
     }
   }
 
-  // --- 9. Elevated Shinkansen Viaduct (Z = -78.0, Deck Y = 6.8m) ---
+  // --- 9. Elevated Shinkansen Viaduct (Z = -78.0, Deck Y = 6.8m, spanning X = -195 .. +485!) ---
   {
     const trainZ = -78.0, deckY = 6.8;
-    pushTransformed(buckets.highwayConcrete, makeSubdividedBox(470.0, 1.15, 6.4, 0.18, 2.0), 55.0, deckY - 0.58, trainZ);
+    pushTransformed(buckets.highwayConcrete, makeSubdividedBox(680.0, 1.15, 6.4, 0.18, 2.0), 145.0, deckY - 0.58, trainZ);
     for (const zOff of [-3.05, 3.05]) {
-      pushTransformed(buckets.stoneCream, makeSubdividedBox(470.0, 0.95, 0.32, 0.25, 2.0), 55.0, deckY + 0.45, trainZ + zOff);
+      pushTransformed(buckets.stoneCream, makeSubdividedBox(680.0, 0.95, 0.32, 0.25, 2.0), 145.0, deckY + 0.45, trainZ + zOff);
     }
-    for (let px = -165.0; px <= 265.0; px += 26.0) {
-      if (track.minDistToRibbon2D(px, trainZ, 'ground').dist < 13.8) continue;
-      if (track.minDistToRibbon2D(px, trainZ, 'skyway').dist < 9.0) continue;
+    for (let px = -185.0; px <= 465.0; px += 28.0) {
+      if (track.minDistToRibbon2D(px, trainZ, 'ground').dist < 16.0) continue;
+      if (track.minDistToRibbon2D(px, trainZ, 'skyway').dist < 10.5) continue;
       track.registerSolidCylinder(px, trainZ, 1.05, deckY);
       const col = new THREE.CylinderGeometry(0.85, 1.05, deckY - 1.0, 12, 4);
       col.setAttribute('uv1', col.getAttribute('uv'));
@@ -956,8 +958,8 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // --- 10. Monochromatic Spectral Traffic Signal Gantries (Z = +12, -48) ---
   for (const gz of [12.0, -48.0]) {
-    const leftPostX = gz > 0.0 ? -16.8 : -9.4;
-    const rightPostX = 9.4;
+    const leftPostX = gz > 0.0 ? -17.6 : -11.4;
+    const rightPostX = 11.4;
     const barY = 5.85;
     for (const sx of [leftPostX, rightPostX]) {
       track.registerSolidCylinder(sx, gz, 0.24, barY);
@@ -986,14 +988,14 @@ export function buildCityWorld(materials, shaderSystem) {
   {
     const billboardSpecs = [
       // [cx, baseY, cz, rotY, isTerrellGrid]
-      [12.4, 0.0, 128.0, -0.36, true],
-      [13.6, 0.0, 52.0, -0.36, false],
+      [14.2, 0.0, 148.0, -0.36, true],
+      [15.0, 0.0, 52.0, -0.36, false],
       [-32.0, 0.0, -2.0, 0.48, true],
-      [12.4, 0.0, -36.0, -0.40, false],
-      [-12.8, 0.0, -108.0, 0.36, true],
-      [152.0, 0.9, -212.0, -0.78, false],
-      [230.0, 1.2, 48.0, -1.52, true],
-      [33.2, 13.8, -52.0, -0.42, true], // Elevated Skyway Panorama Billboard!
+      [14.2, 0.0, -36.0, -0.40, false],
+      [-14.5, 0.0, -148.0, 0.36, true],
+      [185.0, 1.3, -464.0, -Math.PI * 0.5, false],
+      [386.0, 1.2, 48.0, -1.52, true],
+      [39.5, 13.8, -58.0, -0.42, true], // Elevated Skyway Panorama Billboard!
     ];
 
     const bw = 9.2;
@@ -1059,46 +1061,46 @@ export function buildCityWorld(materials, shaderSystem) {
   const tyrePoses = [];
   const conePoses = [];
 
-  const propFrameStep = IS_MOBILE_DEVICE ? 20 : 10;
+  const propFrameStep = IS_MOBILE_DEVICE ? 28 : 14;
   for (let i = 0; i < frames.length; i += propFrameStep) {
     const f = frames[i];
-    // Chicane tire stacks & cones on high-curvature outer shoulders!
-    if (Math.abs(f.signedCurv) > 0.010 && i % propFrameStep === 0) {
+    // Chicane tire stacks & cones on sweeping outer shoulders!
+    if (Math.abs(f.signedCurv) > 0.0046 && i % propFrameStep === 0) {
       const outSide = -Math.sign(f.signedCurv);
-      const tx = f.pos.x + f.right.x * outSide * 8.65;
-      const tz = f.pos.z + f.right.z * outSide * 8.65;
+      const tx = f.pos.x + f.right.x * outSide * 10.25;
+      const tz = f.pos.z + f.right.z * outSide * 10.25;
       const ty = track.getSupportSurface(tx, f.pos.y + 1.5, tz).y;
-      if (track.minDistToRibbon2D(tx, tz, 'skyway').dist > 7.5) {
+      if (track.minDistToRibbon2D(tx, tz, 'skyway').dist > 9.0) {
         const stackCount = IS_MOBILE_DEVICE ? 2 : 3;
         for (let stack = 0; stack < stackCount; stack++) {
           tyrePoses.push({ x: tx, y: ty + 0.08 + stack * 0.17, z: tz, yaw: stack * 0.7, scale: 1.18 });
         }
-        const cx = f.pos.x + f.right.x * outSide * 8.15;
-        const cz = f.pos.z + f.right.z * outSide * 8.15;
+        const cx = f.pos.x + f.right.x * outSide * 9.72;
+        const cz = f.pos.z + f.right.z * outSide * 9.72;
         const cy = track.getSupportSurface(cx, f.pos.y + 1.5, cz).y;
         conePoses.push({ x: cx, y: cy + 0.02, z: cz, yaw: 0, scale: 1.15 });
       }
     }
 
     for (const side of [-1, 1]) {
-      if (side > 0 && Math.abs(f.pos.x) < 12.5 && ((f.pos.z >= 6.0 && f.pos.z <= 72.0) || (f.pos.z >= 166.0 && f.pos.z <= 214.0))) {
+      if (side > 0 && Math.abs(f.pos.x) < 14.5 && ((f.pos.z >= 2.0 && f.pos.z <= 74.0) || (f.pos.z >= 252.0 && f.pos.z <= 318.0))) {
         continue;
       }
-      if (side < 0 && Math.abs(f.pos.x) < 12.5 && ((f.pos.z >= -60.0 && f.pos.z <= -18.0) || (f.pos.z >= 2.0 && f.pos.z <= 138.0))) {
+      if (side < 0 && Math.abs(f.pos.x) < 14.5 && ((f.pos.z >= -60.0 && f.pos.z <= -18.0) || (f.pos.z >= 2.0 && f.pos.z <= 165.0))) {
         continue;
       }
-      if (Math.abs(f.pos.x) < 15.0 && f.pos.z >= -162.0 && f.pos.z <= -120.0) {
+      if (Math.abs(f.pos.x) < 16.5 && f.pos.z >= -304.0 && f.pos.z <= -246.0) {
         continue;
       }
-      if (Math.hypot(f.pos.x - 201.0, f.pos.z - 54.0) < 26.0) {
+      if (Math.hypot(f.pos.x - 360.5, f.pos.z - 60.0) < 28.0) {
         continue;
       }
 
-      const lat = side * 10.15;
+      const lat = side * 11.65;
       const px = f.pos.x + f.right.x * lat;
       const pz = f.pos.z + f.right.z * lat;
 
-      if (track.minDistToRibbon2D(px, pz, 'skyway').dist < 7.8) continue;
+      if (track.minDistToRibbon2D(px, pz, 'skyway').dist < 9.2) continue;
 
       // Exact banked sidewalk / terrain surface elevation so zero trees or lamps EVER float on banked turns!
       const surfY = track.getSupportSurface(px, f.pos.y + 1.5, pz).y;
@@ -1129,11 +1131,11 @@ export function buildCityWorld(materials, shaderSystem) {
 
   // Park & Infield Botanical Grove (`broadleaf_tree.glb` & `quiver_tree.glb` — natural off-road obstacles!)
   const parkSpots = [
-    [35, -35], [44, -18], [38, 12], [68, 42], [38, 92], [28, 62],
-    [42, -72], [64, -84], [86, -118], [138, -124], [168, -42], [162, 42],
-    [98, 58], [86, 158], [52, 186], [112, 188],
-    [-22, 42], [-34, 18], [-26, -86], [-52, -32], [-48, 12],
-    [242, -18], [244, 72], [228, 152],
+    [45, -35], [58, -18], [52, 18], [88, 42], [52, 92], [38, 62],
+    [62, -72], [94, -96], [128, -220], [225, -245], [278, -62], [272, 48],
+    [148, 58], [136, 218], [82, 266], [192, 288],
+    [-26, -96], [-56, -32], [-62, 12],
+    [412, -28], [414, 92], [408, 192],
   ];
   parkSpots.forEach(([gx, gz], idx) => {
     if (!isFootprintClear(gx, gz, 2.5)) return;

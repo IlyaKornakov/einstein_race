@@ -162,12 +162,12 @@ export class RelativisticRenderer {
       72.0,
       window.innerWidth / Math.max(1, window.innerHeight),
       0.15,
-      16000.0
+      20000.0
     );
     this.camera.rotation.order = 'YXZ';
 
-    // 3. Relativistic Sky Dome (follows observer every frame)
-    const skyGeo = new THREE.SphereGeometry(540.0, this.isMobile ? 32 : 48, this.isMobile ? 20 : 32);
+    // 3. Relativistic Sky Dome (follows observer every frame; large 1800m radius encompasses entire expanded circuit!)
+    const skyGeo = new THREE.SphereGeometry(1800.0, this.isMobile ? 32 : 48, this.isMobile ? 20 : 32);
     this.skyMat = this.shaderSystem.createSkyMaterial(false);
     this.skyMesh = new THREE.Mesh(skyGeo, this.skyMat);
     this.skyMesh.frustumCulled = false;

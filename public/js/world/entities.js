@@ -19,7 +19,7 @@ import { GLTFLoader } from '../../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../../vendor/DRACOLoader.js';
 import { clone as cloneSkeleton } from '../../vendor/SkeletonUtils.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.1';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.2';
 
 /**
  * Merges static child submeshes sharing identical Material & vertex attribute layout inside a
@@ -202,10 +202,10 @@ export class EntityManager {
     this.playerCar = null;
     this.train = null;
 
-    // Precompute exact arc-length `s` along `groundData` for Start/Finish (Z=94), Skyway Split (Z=68), and Merge (Z=172)
+    // Precompute exact arc-length `s` along `groundData` for Start/Finish (Z=94), Skyway Split (Z=68), and Merge (Z=262)
     this.sFinishLine = this._findGroundS(0.0, 94.0);
-    this.sSkywaySplit = this._findGroundS(4.6, 68.0);
-    this.sSkywayMerge = this._findGroundS(4.6, 172.0);
+    this.sSkywaySplit = this._findGroundS(5.4, 68.0);
+    this.sSkywayMerge = this._findGroundS(5.4, 262.0);
 
     this.group = new THREE.Group();
     this.group.name = 'DynamicRelativisticEntities';
@@ -667,8 +667,8 @@ export class EntityManager {
         ? this._instantiateFerrari(ferrariGltf, ferrariAOTex, spec.hex, { isCoMoving: false })
         : this._instantiateConceptCar(conceptGltf, spec.hex);
 
-      const gridRowZ = 122.0 + idx * 6.5; // Staggered from Z=122..148 ahead of Player at Z=158!
-      const gridLane = idx % 2 === 0 ? -2.35 : 2.35;
+      const gridRowZ = 148.0 + idx * 7.2; // Staggered from Z=148..177 ahead of Player at Z=192!
+      const gridLane = idx % 2 === 0 ? -2.8 : 2.8;
       const sGrid = this._findGroundS(0.0, gridRowZ);
       const pose = this.cityWorld.sampleLanePose('ground', sGrid, gridLane, false);
 
@@ -887,7 +887,7 @@ export class EntityManager {
         isStaticPerformer: false,
         s: ((i / numWalkers) * groundLen + 15.0) % groundLen,
         totalLen: groundLen,
-        lane: side * (10.75 + (i % 3) * 0.35),
+        lane: side * (12.1 + (i % 3) * 0.38),
         rev: i % 3 === 0,
         walkSpeedMps: 1.38 + (i % 4) * 0.16,
       });
@@ -950,8 +950,8 @@ export class EntityManager {
           root,
           mixer,
           uniforms,
-          cx: 56.0,
-          cz: 82.0,
+          cx: 95.0,
+          cz: 110.0,
           radius: 13.5 + h * 3.0,
           phase: h * 0.65,
           omega: 0.42,
@@ -1511,14 +1511,14 @@ export class EntityManager {
 
       // Track AI Opponent Lap Counting & Monotonic Race Score!
       if (npc.isOpponent) {
-        if (!npc.hasCrossedStart && npc.y < 2.5 && Math.abs(npc.x) < 12.5 && prevZ > 94.0 && npc.z <= 94.0) {
+        if (!npc.hasCrossedStart && npc.y < 2.5 && Math.abs(npc.x) < 14.5 && prevZ > 94.0 && npc.z <= 94.0) {
           npc.hasCrossedStart = true;
         }
         if (npc.z < -35.0 || npc.y > 8.0) {
           npc.passedMidpoint = true;
           npc.hasCrossedStart = true;
         }
-        if (npc.passedMidpoint && npc.y < 2.5 && Math.abs(npc.x) < 12.5 && prevZ > 94.0 && npc.z <= 94.0) {
+        if (npc.passedMidpoint && npc.y < 2.5 && Math.abs(npc.x) < 14.5 && prevZ > 94.0 && npc.z <= 94.0) {
           npc.lap++;
           npc.passedMidpoint = false;
           if (npc.lap >= 3 && !npc.finished) {
@@ -1586,8 +1586,8 @@ export class EntityManager {
       const tr = this.train;
       const trainBeta = Math.min(0.88, tr.baseBeta * this.trafficSpeedScale);
       tr.x += tr.dir * trainBeta * c * dtC;
-      if (tr.x > 265.0) tr.x = -265.0;
-      if (tr.x < -265.0) tr.x = 265.0;
+      if (tr.x > 465.0) tr.x = -190.0;
+      if (tr.x < -190.0) tr.x = 465.0;
       tr.root.position.set(tr.x, tr.y, tr.z);
       const gTrain = 1.0 / Math.sqrt(Math.max(1e-5, 1.0 - trainBeta * trainBeta));
       tr.uniforms.uEntityPosNow.value.set(tr.x, tr.y + 1.6, tr.z);
