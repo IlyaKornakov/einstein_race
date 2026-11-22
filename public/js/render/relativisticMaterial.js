@@ -10,7 +10,23 @@
  */
 
 import * as THREE from 'three';
-import { computeCalibratedSpectralMatrix, getSpectralGLSL } from '../physics/spectral.js?v=1.4';
+import { computeCalibratedSpectralMatrix, buildSpectralLUTData, getSpectralGLSL } from '../physics/spectral.js?v=1.5';
+
+function createSpectralLUTTexture() {
+  const { width, height, floats } = buildSpectralLUTData();
+  const halfData = new Uint16Array(floats.length);
+  for (let i = 0; i < floats.length; i++) {
+    halfData[i] = THREE.DataUtils.toHalfFloat(floats[i]);
+  }
+  const tex = new THREE.DataTexture(halfData, width, height, THREE.RGBAFormat, THREE.HalfFloatType);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
+}
 
 export class RelativisticShaderSystem {
   /**
@@ -20,6 +36,7 @@ export class RelativisticShaderSystem {
     this.metric = metric;
 
     const spectralMat3 = new THREE.Matrix3().fromArray(computeCalibratedSpectralMatrix());
+    const spectralLUT = createSpectralLUTTexture();
 
     this.sharedUniforms = {
       uObsPos: { value: new THREE.Vector3(0, 1.5, 0) },
@@ -37,6 +54,7 @@ export class RelativisticShaderSystem {
       uObsProperAccel: { value: new THREE.Vector3(0, 0, 0) },
       uBeamingExponent: { value: 3.2 },
       uRgbToSpectralWeights: { value: spectralMat3 },
+      uSpectralLUT: { value: spectralLUT },
 
       // Atmospheric / Time-of-Day uniforms shared with Sky & PMREM env cubemap
       uSunDir: { value: new THREE.Vector3(0.45, 0.72, 0.52).normalize() },
@@ -121,7 +139,7 @@ export class RelativisticShaderSystem {
     const metricGLSL = this.metric.getShaderModule();
     const spectralGLSL = getSpectralGLSL();
 
-    const cacheTag = `rel_sr_v5_${material.type}`;
+    const cacheTag = `rel_sr_v6_${material.type}`;
     material.customProgramCacheKey = () => cacheTag;
 
     material.onBeforeCompile = (shader) => {

@@ -2,15 +2,15 @@
  * Relativistic Grand Prix — Main Game Loop, Rest-Frame Radar & Twin-Paradox Race Manager
  */
 
-import { ObserverState, MinkowskiMetric } from './physics/spacetime.js?v=1.4';
-import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=1.4';
-import { VehicleController } from './physics/vehicle.js?v=1.4';
-import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=1.4';
-import { buildPBRMaterialLibrary } from './render/textures.js?v=1.4';
-import { buildCityWorld } from './world/cityBuilder.js?v=1.4';
-import { EntityManager } from './world/entities.js?v=1.4';
-import { RelativisticRenderer } from './render/renderer.js?v=1.4';
-import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=1.4';
+import { ObserverState, MinkowskiMetric } from './physics/spacetime.js?v=1.5';
+import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=1.5';
+import { VehicleController } from './physics/vehicle.js?v=1.5';
+import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=1.5';
+import { buildPBRMaterialLibrary } from './render/textures.js?v=1.5';
+import { buildCityWorld } from './world/cityBuilder.js?v=1.5';
+import { EntityManager } from './world/entities.js?v=1.5';
+import { RelativisticRenderer } from './render/renderer.js?v=1.5';
+import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=1.5';
 
 function formatClock(seconds) {
   const s = Math.max(0, seconds);
@@ -733,9 +733,9 @@ function bindUI(metric, vehicle, entities, renderer, audio, startNewGrandPrix, r
       btnMobileGas.classList.toggle('hidden', enabled);
     }
   };
-  if (isTouchScreen) {
-    applyAutoGasState(true);
-  }
+  // Default Auto-Gas OFF everywhere so the car stays at rest (0.000c) until GAS is pressed!
+  applyAutoGasState(false);
+  void isTouchScreen;
   btnAutoGas?.addEventListener('click', (e) => {
     e.preventDefault();
     applyAutoGasState(!vehicle.autoThrottle);

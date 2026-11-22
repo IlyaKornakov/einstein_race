@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Relativistic Grand Prix — Special Relativity 3D Racing</title>
-  <link rel="stylesheet" href="./styles.css?v=1.4" />
+  <link rel="stylesheet" href="./styles.css?v=1.5" />
   <script type="importmap">
     {
       "imports": {
@@ -60,7 +60,7 @@
   <!-- Top-Left Sleek Controls & Camera / Physics Bar -->
   <div id="hudTopLeft" class="hud-panel hud-top-left">
     <div class="brand-row">
-      <span class="brand-badge">SR GP v1.4</span>
+      <span class="brand-badge">SR GP v1.0</span>
       <span class="brand-name">Relativistic Circuit</span>
       <span id="fpsReadout" class="fps-pill">60 FPS</span>
       <button id="togglePhysicsBtn" class="settings-pill" title="Open Spacetime &amp; Physics Tuning">⚙ Physics</button>
@@ -197,7 +197,7 @@
   <div id="mobileControls" class="mobile-controls" aria-label="Touch driving controls">
     <div class="touch-cluster touch-left-col">
       <div class="touch-mode-pills">
-        <button type="button" id="btnToggleAutoGas" class="touch-pill active">Auto-Gas: ON</button>
+        <button type="button" id="btnToggleAutoGas" class="touch-pill">Auto-Gas: OFF</button>
         <button type="button" id="btnToggleTiltSteer" class="touch-pill">Steer: Touch</button>
       </div>
       <div id="touchSteerTrack" class="touch-steer-track" aria-label="Analog Steering Slider">
@@ -216,11 +216,11 @@
       </div>
       <div class="touch-pedals-row">
         <button type="button" class="touch-btn touch-brake" data-vkey="ArrowDown">BRAKE</button>
-        <button type="button" id="btnMobileGas" class="touch-btn touch-gas hidden" data-vkey="ArrowUp">GAS</button>
+        <button type="button" id="btnMobileGas" class="touch-btn touch-gas" data-vkey="ArrowUp">GAS</button>
       </div>
     </div>
   </div>
 
-  <script type="module" src="./js/main.js?v=1.4"></script>
+  <script type="module" src="./js/main.js?v=1.5"></script>
 </body>
 </html>

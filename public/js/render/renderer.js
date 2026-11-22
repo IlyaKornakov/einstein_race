@@ -137,7 +137,7 @@ export class RelativisticRenderer {
       powerPreference: this.isMobile ? 'default' : 'high-performance',
       stencil: false,
     });
-    const maxDpr = this.isMobile ? 1.25 : 1.5;
+    const maxDpr = this.isMobile ? 1.0 : 1.5;
     this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
     this.threeRenderer.setSize(window.innerWidth, window.innerHeight, false);
     this.threeRenderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -264,7 +264,7 @@ export class RelativisticRenderer {
     const h = Math.max(1, window.innerHeight);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    const maxDpr = this.isMobile ? 1.25 : 1.5;
+    const maxDpr = this.isMobile ? 1.0 : 1.5;
     this.threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
     this.threeRenderer.setSize(w, h, false);
     if (this.composer) {

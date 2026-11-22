@@ -19,8 +19,8 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { createTrackSystem } from './trackBuilder.js?v=1.4';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=1.4';
+import { createTrackSystem } from './trackBuilder.js?v=1.5';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=1.5';
 
 const _mat4 = new THREE.Matrix4();
 const _quat = new THREE.Quaternion();

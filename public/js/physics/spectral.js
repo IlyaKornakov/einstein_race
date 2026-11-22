@@ -151,16 +151,99 @@ export function wavelengthToDisplaySRGB(wavelengthNm, D = 1.0) {
 }
 
 /**
+ * Precomputes a 513x5 RGBA float array (converted to HalfFloat DataTexture in renderer)
+ * encoding exact CIE 1931 Doppler-shifted responses across D in [1/24, 24] (D = 24^(2t - 1),
+ * with t = 0.5 at texel 256 -> exact D = 1.0 identity!).
+ * Replaces ~91 per-pixel transcendental exp()/inversesqrt() calls with 3-5 L1-cached LUT fetches!
+ */
+export function buildSpectralLUTData() {
+  const W = 513;
+  const H = 5;
+  const floats = new Float32Array(W * H * 4);
+
+  const uvBands = [
+    [0.0095, 368.0, 34.0],
+    [0.0110, 292.0, 32.0],
+    [0.0125, 226.0, 28.0],
+    [0.0135, 172.0, 24.0],
+    [0.0145, 130.0, 20.0],
+  ];
+  const nirBands = [
+    [0.0068, 735.0, 62.0],
+    [0.0052, 920.0, 90.0],
+    [0.0039, 1180.0, 125.0],
+    [0.0029, 1540.0, 170.0],
+    [0.0021, 2020.0, 230.0],
+    [0.0015, 2680.0, 310.0],
+    [0.0011, 3600.0, 420.0],
+    [0.0008, 4900.0, 580.0],
+  ];
+
+  const smoothstep = (e0, e1, x) => {
+    const t = Math.max(0.0, Math.min(1.0, (x - e0) / (e1 - e0)));
+    return t * t * (3.0 - 2.0 * t);
+  };
+
+  const writePixel = (row, col, rgb) => {
+    const idx = (row * W + col) * 4;
+    floats[idx] = rgb[0];
+    floats[idx + 1] = rgb[1];
+    floats[idx + 2] = rgb[2];
+    floats[idx + 3] = 1.0;
+  };
+
+  for (let i = 0; i < W; i++) {
+    const t = i / (W - 1);
+    const D = Math.pow(24.0, 2.0 * t - 1.0);
+
+    writePixel(0, i, integrateShiftedGaussianToLinearRGB(612.0, 36.0, D));
+    writePixel(1, i, integrateShiftedGaussianToLinearRGB(542.0, 32.0, D));
+    writePixel(2, i, integrateShiftedGaussianToLinearRGB(454.0, 25.0, D));
+
+    const uvSum = [0.0, 0.0, 0.0];
+    for (const [w, mu, sig] of uvBands) {
+      const c = integrateShiftedGaussianToLinearRGB(mu, sig, D);
+      uvSum[0] += w * c[0] * 1.12;
+      uvSum[1] += w * c[1] * 0.94;
+      uvSum[2] += w * c[2] * 0.80;
+    }
+    writePixel(3, i, uvSum);
+
+    const nirSum = [0.0, 0.0, 0.0];
+    const bMix = smoothstep(1.25, 3.4, D);
+    const btR = 0.92 + (0.68 - 0.92) * bMix;
+    const btG = 0.98 + (0.95 - 0.98) * bMix;
+    const btB = 1.10 + (1.38 - 1.10) * bMix;
+    for (const [w, mu, sig] of nirBands) {
+      const c = integrateShiftedGaussianToLinearRGB(mu, sig, D);
+      nirSum[0] += w * c[0] * btR;
+      nirSum[1] += w * c[1] * btG;
+      nirSum[2] += w * c[2] * btB;
+    }
+    writePixel(4, i, nirSum);
+  }
+
+  return { width: W, height: H, floats };
+}
+
+/**
  * GLSL spectral shift module to inject into fragment shaders.
  */
 export function getSpectralGLSL() {
   return /* glsl */ `
     uniform mat3 uRgbToSpectralWeights;
+    uniform sampler2D uSpectralLUT;
     uniform float uEnableDoppler;
     uniform float uEnableBeaming;
     uniform float uBeamingExponent; // 3.5 - 4.0 physical bolometric, adjustable
 
     const float SQRT_2PI = 2.50662827463;
+    const float INV_LN_24 = 0.314657968; // 1.0 / ln(24.0)
+
+    float spectralLutU(float D) {
+      float t = clamp(0.5 + 0.5 * log(clamp(D, 0.0417, 24.0)) * INV_LN_24, 0.0, 1.0);
+      return (t * 512.0 + 0.5) / 513.0;
+    }
 
     float gaussOverlap(float ampA, float muA, float sigA, float muB, float sigB) {
       float varSum = sigA * sigA + sigB * sigB;
@@ -173,7 +256,6 @@ export function getSpectralGLSL() {
       float muObs = muEmit * invD;
       float sigObs = sigEmit * invD;
 
-      // Quick range reject outside visible [350nm, 760nm] +/- 3.5*sigObs
       float margin = 3.6 * sigObs + 110.0;
       if (muObs < 360.0 - margin || muObs > 730.0 + margin) {
         return vec3(0.0);
@@ -191,7 +273,6 @@ export function getSpectralGLSL() {
 
       vec3 xyz = vec3(X, Y, Z) * D;
 
-      // CIE XYZ -> Linear Rec.709 / sRGB
       return vec3(
          3.2404542 * xyz.x - 1.5371385 * xyz.y - 0.4985314 * xyz.z,
         -0.9692660 * xyz.x + 1.8760108 * xyz.y + 0.0415560 * xyz.z,
@@ -199,14 +280,6 @@ export function getSpectralGLSL() {
       );
     }
 
-    /**
-     * Applies full relativistic Doppler spectral shift + relativistic beaming
-     * to a rest-frame linear RGB radiance, augmented with physical UV and Near-IR
-     * spectral tails:
-     *   uvWeight  : UV reflectance/emission relative weight (~315nm & ~215nm)
-     *   nirWeight : Near-IR reflectance/emission weight (~810nm & ~1180nm, e.g. high on foliage!)
-     *   narrowNm  : If > 0, treats emission as a narrow-band spectral line (traffic lights / neon)
-     */
     vec3 applyRelativisticSpectrumCustom(
       vec3 restLinearRGB,
       float D_raw,
@@ -230,32 +303,20 @@ export function getSpectralGLSL() {
         float refPeak = max(0.05, max(refAt1.r, max(refAt1.g, refAt1.b)));
         shifted = (lum / refPeak) * evalLobeLinearRGB(narrowNm, 11.0, D);
       } else {
+        float u = spectralLutU(D);
         vec3 w = uRgbToSpectralWeights * restLinearRGB;
-        shifted = w.x * evalLobeLinearRGB(612.0, 36.0, D)
-                + w.y * evalLobeLinearRGB(542.0, 32.0, D)
-                + w.z * evalLobeLinearRGB(454.0, 25.0, D);
+        shifted = w.x * texture2D(uSpectralLUT, vec2(u, 0.1)).rgb
+                + w.y * texture2D(uSpectralLUT, vec2(u, 0.3)).rgb
+                + w.z * texture2D(uSpectralLUT, vec2(u, 0.5)).rgb;
 
-        // Scale UV & Near-IR continuum tails by surface radiance energy so 3D PBR shading,
-        // cast shadows, and dark sign/brick textures preserve crisp contrast at all speeds!
         float reflEnergy = max(0.0, dot(restLinearRGB, vec3(0.2126, 0.7152, 0.0722)));
-
         float uvBlend = (1.0 - smoothstep(0.86, 1.00, D)) * uvWeight * reflEnergy;
         if (uvBlend > 1e-5) {
-          vec3 uvSum = 0.0155 * evalLobeLinearRGB(356.0, 44.0, D)
-                     + 0.0195 * evalLobeLinearRGB(244.0, 42.0, D)
-                     + 0.0235 * evalLobeLinearRGB(152.0, 32.0, D);
-          shifted += uvBlend * uvSum * vec3(1.12, 0.94, 0.80);
+          shifted += uvBlend * texture2D(uSpectralLUT, vec2(u, 0.7)).rgb;
         }
-
         float nirBlend = smoothstep(1.00, 1.14, D) * nirWeight * reflEnergy;
         if (nirBlend > 1e-5) {
-          vec3 nirSum = 0.0095 * evalLobeLinearRGB(755.0,   78.0, D)
-                      + 0.0068 * evalLobeLinearRGB(1080.0, 130.0, D)
-                      + 0.0046 * evalLobeLinearRGB(1620.0, 210.0, D)
-                      + 0.0030 * evalLobeLinearRGB(2480.0, 340.0, D)
-                      + 0.0019 * evalLobeLinearRGB(3850.0, 540.0, D);
-          vec3 blueTint = mix(vec3(0.92, 0.98, 1.10), vec3(0.68, 0.95, 1.38), smoothstep(1.25, 3.4, D));
-          shifted += nirBlend * nirSum * blueTint;
+          shifted += nirBlend * texture2D(uSpectralLUT, vec2(u, 0.9)).rgb;
         }
       }
 
@@ -267,11 +328,11 @@ export function getSpectralGLSL() {
       float beamD = mix(1.0, D_raw, uEnableBeaming);
       float beamFactor = pow(clamp(beamD, 0.12, 12.0), 0.36);
       if (abs(D - 1.0) < 1e-3) return max(vec3(0.0), restLinearRGB * beamFactor);
-      float clampedD = clamp(D, 0.58, 1.85);
+      float u = spectralLutU(clamp(D, 0.58, 1.85));
       vec3 w = uRgbToSpectralWeights * restLinearRGB;
-      vec3 shifted = w.x * evalLobeLinearRGB(612.0, 36.0, clampedD)
-                   + w.y * evalLobeLinearRGB(542.0, 32.0, clampedD)
-                   + w.z * evalLobeLinearRGB(454.0, 25.0, clampedD);
+      vec3 shifted = w.x * texture2D(uSpectralLUT, vec2(u, 0.1)).rgb
+                   + w.y * texture2D(uSpectralLUT, vec2(u, 0.3)).rgb
+                   + w.z * texture2D(uSpectralLUT, vec2(u, 0.5)).rgb;
       return max(vec3(0.0), shifted * beamFactor);
     }
 
