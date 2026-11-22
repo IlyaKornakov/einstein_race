@@ -707,6 +707,12 @@ input[type="range"] {
   border: 1px solid rgba(192, 132, 252, 0.65);
   box-shadow: 0 0 8px rgba(168, 85, 247, 0.35);
 }
+.grav-badge.extreme {
+  background: rgba(244, 63, 94, 0.36);
+  color: #ffe4e6;
+  border-color: rgba(251, 113, 133, 0.85);
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.65);
+}
 
 .boost-wrap {
   margin-left: auto;

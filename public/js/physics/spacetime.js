@@ -496,19 +496,26 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
     super(speedOfLight);
     this.enableGR = true;
 
-    // Spinning Black Hole ("Singularity Slingshot Basin" West of Grand Boulevard)
-    this.bhPos = new Float64Array([-34.0, 6.2, 54.0]);
-    this.bhRs = 4.4;       // Schwarzschild horizon radius r_s [m] (shadow b_crit = 11.4m!)
-    this.bhSpin = 0.88;    // Dimensionless Kerr spin a_* in [0, 1) (prograde frame-dragging!)
+    // 1. Spinning Kerr–Schwarzschild Black Hole ("Gargantua Ergosphere Basin" West of Grand Boulevard)
+    //    Compact horizon r_H = 3.50m at road height (y = 1.90m) with deep near-extremal Kerr ergosphere
+    //    so driving right beside the shadow (r = 4.3m..8.5m) delivers 10x–55x gravitational time dilation!
+    this.bhPos = new Float64Array([-36.0, 1.90, 54.0]);
+    this.bhRs = 3.50;      // Event Horizon radius r_H [m] (Photon Sphere = 5.25m, Shadow b_crit = 9.1m)
+    this.bhSpin = 0.98;    // Near-extremal Kerr spin a_* in [0, 1) (strong ergosphere frame-dragging!)
 
-    // Traversable Morris–Thorne Wormhole Shortcut (North Boulevard End <-> East Skyline Straight)
-    this.wormholeA = new Float64Array([-5.0, 3.1, -150.0]);
-    this.wormholeB = new Float64Array([201.0, 4.0, 54.0]);
-    this.wormholeThroatR = 4.2; // Throat radius b_0 [m]
+    // 2. Finite-Throat Traversable Morris–Thorne Wormhole Shortcut (North Boulevard <-> East Skyline)
+    this.wormholeA = new Float64Array([-5.0, 2.55, -150.0]);
+    this.wormholeB = new Float64Array([201.0, 3.45, 54.0]);
+    this.wormholeThroatR = 4.2;   // Throat radius b_0 [m]
+    this.wormholeLength = 20.0;   // Finite curved-spacetime proper throat length L [m] (~450m track shortcut!)
+
+    // 3. Binary Black Hole Merger Gravitational-Wave Source (overhead East Skyline Interferometer Corridor)
+    this.gwPos = new Float64Array([275.0, 52.0, 28.0]);
   }
 
   /**
-   * Evaluates gravitational lapse alpha(x) = sqrt(max(0.08, 1 - r_s / r)) at spatial position (x, y, z).
+   * Evaluates Kerr–Schwarzschild gravitational lapse alpha(x) in [0.018 .. 1.0] at (x, y, z).
+   * Approaches 0 smoothly at r -> r_H = 5.20m (clamped at 0.018 => up to 55.5x time dilation!).
    */
   gravLapseAt(x, y, z) {
     if (!this.enableGR) return 1.0;
@@ -516,19 +523,23 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
     const dy = y - this.bhPos[1];
     const dz = z - this.bhPos[2];
     const r = Math.hypot(dx, dy, dz);
-    // Effective potential includes extended strong-field halo so roadside flybys feel vivid GR dilation
-    const effRs = this.bhRs * 1.45;
-    if (r > 95.0) return 1.0;
-    const fade = Math.max(0.0, 1.0 - Math.max(0.0, r - 55.0) / 40.0);
-    const ratio = (effRs / Math.max(effRs * 1.04, r)) * fade;
-    return Math.sqrt(Math.max(0.09, 1.0 - ratio));
+    if (r >= 105.0) return 1.0;
+
+    const rH = this.bhRs;
+    const rSafe = Math.max(rH * 1.0005, r);
+    const u = rH / rSafe;
+    const u2 = u * u;
+    const rawAlpha = Math.pow(Math.max(0.0, 1.0 - u), 1.15) / (1.0 + 6.5 * u2 + 12.0 * u2 * u2);
+    const farFade = Math.max(0.0, Math.min(1.0, (105.0 - r) / 40.0));
+    const blended = 1.0 - (1.0 - rawAlpha) * farFade;
+    return Math.max(0.018, Math.min(1.0, blended));
   }
 
   metricTensor(event) {
     const c2 = this.c * this.c;
     const alpha = this.gravLapseAt(event[1], event[2], event[3]);
     const a2 = alpha * alpha;
-    const invA2 = 1.0 / Math.max(0.08, a2);
+    const invA2 = 1.0 / Math.max(0.0004, a2);
     return new Float64Array([
       -c2 * a2, 0, 0, 0,
       0, invA2, 0, 0,
@@ -539,7 +550,12 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
 
   stepObserver(observer, dtProper) {
     const dtSR = super.stepObserver(observer, dtProper);
-    const alpha = this.gravLapseAt(observer.event[1], observer.event[2], observer.event[3]);
+    const alphaCam = this.gravLapseAt(observer.event[1], observer.event[2], observer.event[3]);
+    let alpha = alphaCam;
+    if (observer.carPos) {
+      const alphaCar = this.gravLapseAt(observer.carPos[0], observer.carPos[1], observer.carPos[2]);
+      alpha = Math.min(alphaCam, alphaCar);
+    }
     observer.gravAlpha = alpha;
     if (!this.enableGR || alpha >= 0.9999) {
       observer.totalTimeDilation = observer.gamma;
@@ -567,13 +583,15 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
       uniform vec3 uObsProperAccel;
       uniform float uEnableAccelEquiv;
 
-      // General Relativity Curved-Spacetime Uniforms (v2.0)
+      // General Relativity Curved-Spacetime Uniforms (v2.1)
       uniform float uEnableGR;
       uniform vec3 uBHPos;
       uniform float uBHRs;
+      uniform float uObsGravAlpha;
       uniform vec3 uWormholeAPos;
       uniform vec3 uWormholeBPos;
       uniform float uWormholeR;
+      uniform vec3 uGWPos;
 
       float evalRindlerDoppler(vec3 obsLocalPos) {
         if (uEnableAccelEquiv < 0.5) return 1.0;
@@ -584,17 +602,34 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
         return clamp(1.0 + 0.68 * pot, 0.22, 3.8);
       }
 
-      // Exact Schwarzschild gravitational frequency shift sqrt((1 - r_s/r_emit) / (1 - r_s/r_obs))
+      float evalGravLapsePoint(vec3 worldP) {
+        float r = length(worldP - uBHPos);
+        if (r >= 105.0 || uBHRs <= 0.01) return 1.0;
+        float rSafe = max(uBHRs * 1.0005, r);
+        float u = uBHRs / rSafe;
+        float u2 = u * u;
+        float rawA = pow(max(0.0, 1.0 - u), 1.15) / (1.0 + 6.5 * u2 + 12.0 * u2 * u2);
+        float fade = clamp((105.0 - r) / 40.0, 0.0, 1.0);
+        return clamp(1.0 - (1.0 - rawA) * fade, 0.018, 1.0);
+      }
+
+      // Exact gravitational frequency shift nu_obs / nu_emit = alpha(x_emit) / alpha(x_obs)
       float evalGravitationalDoppler(vec3 emitWorldPos) {
         if (uEnableGR < 0.5 || uBHRs <= 0.01) return 1.0;
-        float effRs = uBHRs * 1.45;
-        float rEmit = length(emitWorldPos - uBHPos);
-        float rObs = length(uObsPos - uBHPos);
-        float fEmit = clamp(1.0 - max(0.0, rEmit - 55.0) / 40.0, 0.0, 1.0);
-        float fObs = clamp(1.0 - max(0.0, rObs - 55.0) / 40.0, 0.0, 1.0);
-        float g00Emit = max(0.09, 1.0 - (effRs / max(effRs * 1.04, rEmit)) * fEmit);
-        float g00Obs = max(0.09, 1.0 - (effRs / max(effRs * 1.04, rObs)) * fObs);
-        return sqrt(g00Emit / g00Obs);
+        float alphaEmit = evalGravLapsePoint(emitWorldPos);
+        float alphaObs = max(0.018, uObsGravAlpha);
+        return clamp(alphaEmit / alphaObs, 0.02, 55.0);
+      }
+
+      // Synge's Exact Strong-Field Escape Window Half-Angle theta_win(r_obs) in (0, pi]:
+      //   At r_obs = 1.5 r_H (Photon Sphere): theta_win = pi/2 (90 deg — shadow covers half the sky!).
+      //   As r_obs -> r_H: theta_win -> 0 (entire outside universe compresses into overhead Einstein dome!).
+      float evalSyngeEscapeAngle(float rObs, float rH) {
+        float rSafe = max(rH * 1.001, rObs);
+        float f0 = max(0.001, 1.0 - rH / rSafe);
+        float sinCrit = clamp((2.598076 * rH * sqrt(f0)) / rSafe, 0.0, 1.0);
+        float aCrit = asin(sinCrit);
+        return (rSafe < 1.5 * rH) ? aCrit : (3.14159265 - aCrit);
       }
 
       // Thin-Lens Einstein-Ring 3D Vertex Deflection around a compact mass/throat at lensPos
@@ -723,22 +758,63 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
         obs.cityEmitOffset = dxEmit;
         obs.cityEmitPos = uObsPos + dxEmit;
 
-        // Shapiro Gravitational Time Delay: Delta t_Shapiro ~ (2 r_s / c) ln(...) near Black Hole!
+        // Shapiro Gravitational Time Delay, Strong-Field Synge Window Compression & TT Gravitational Waves!
         float shapiroExtraU = 0.0;
         vec3 dxLensed = dxEmit;
         if (uEnableGR > 0.5) {
-          dxLensed = applyLensDeflection3D(dxLensed, uBHPos, uBHRs * 1.15);
-          dxLensed = applyLensDeflection3D(dxLensed, uWormholeAPos, uWormholeR * 0.28);
-          dxLensed = applyLensDeflection3D(dxLensed, uWormholeBPos, uWormholeR * 0.28);
+          dxLensed = applyLensDeflection3D(dxLensed, uBHPos, uBHRs * 1.12);
+          dxLensed = applyLensDeflection3D(dxLensed, uWormholeAPos, uWormholeR * 0.62);
+          dxLensed = applyLensDeflection3D(dxLensed, uWormholeBPos, uWormholeR * 0.62);
+
+          // Near-Horizon Strong-Field Synge Photon-Cone Compression (compresses 3D city into overhead escape cone!)
+          vec3 obsFromBH = uObsPos - uBHPos;
+          float rObsBH = length(obsFromBH);
+          if (rObsBH < 3.4 * uBHRs && length(dxLensed) > 0.35) {
+            float wStrong = 1.0 - smoothstep(1.45 * uBHRs, 3.4 * uBHRs, rObsBH);
+            float thetaWin = evalSyngeEscapeAngle(rObsBH, uBHRs);
+            vec3 uOut = obsFromBH / max(rObsBH, 1e-4);
+            float dLen = length(dxLensed);
+            vec3 nDir = dxLensed / dLen;
+            float chi = acos(clamp(dot(nDir, uOut), -1.0, 1.0));
+            float chiApp = mix(chi, chi * (thetaWin / 3.14159265), wStrong);
+            vec3 rotAx = cross(nDir, uOut);
+            float axL = length(rotAx);
+            if (axL > 1e-5 && abs(chi - chiApp) > 1e-4) {
+              dxLensed = rotateAroundAxis(nDir, rotAx / axL, chi - chiApp) * dLen;
+            }
+          }
+
           float rMid = length((uObsPos + 0.5 * dxEmit) - uBHPos);
-          if (rMid < 45.0) {
-            shapiroExtraU = 2.0 * uBHRs * log(46.0 / max(uBHRs, rMid));
+          if (rMid < 52.0) {
+            shapiroExtraU = 2.0 * uBHRs * log(54.0 / max(uBHRs, rMid));
           }
         }
 
         float uTotal = u + shapiroExtraU;
         obs.lightTravelDist = uTotal;
         obs.emitCoordTime = uObsTime - (uEnableRetardation * uTotal) / uSpeedOfLight;
+
+        // Transverse-Traceless (TT-Gauge) Quadrupole Gravitational Waves from East Skyline Binary Merger!
+        if (uEnableGR > 0.5) {
+          vec2 gwHoriz = obs.cityEmitPos.xz - vec2(212.0, 34.0);
+          float gwEnv = 1.0 - smoothstep(46.0, 110.0, length(gwHoriz));
+          if (gwEnv > 0.002) {
+            vec3 vGW = obs.cityEmitPos - uGWPos;
+            float rGW = max(8.0, length(vGW));
+            vec3 kGW = vGW / rGW;
+            vec3 e1 = normalize(cross(vec3(0.0, 1.0, 0.0), kGW));
+            vec3 e2 = cross(kGW, e1);
+            float phiGW = 4.6 * (obs.emitCoordTime - rGW / uSpeedOfLight);
+            float hAmp = 0.25 * gwEnv;
+            float pLen = length(dxLensed);
+            vec3 effRel = (pLen > 26.0) ? (dxLensed * (26.0 / pLen)) : dxLensed;
+            float x1 = dot(effRel, e1);
+            float x2 = dot(effRel, e2);
+            float hPlus = hAmp * cos(phiGW);
+            float hCross = hAmp * sin(phiGW);
+            dxLensed += e1 * (hPlus * x1 + hCross * x2) + e2 * (hCross * x1 - hPlus * x2);
+          }
+        }
 
         if (isDynamic) {
           if (abs(spinOmega) <= 1e-5 && abs(swingAmp) <= 1e-5) {
@@ -800,12 +876,12 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
         float denD = isDynamic ? (entityGamma * (1.0 - dot(entityBeta, photonDirCity))) : 1.0;
         float srD = numD / max(denD, 1e-4);
         float grD = evalGravitationalDoppler(obs.cityEmitPos);
-        obs.dopplerFactor = clamp(srD * grD * evalRindlerDoppler(obsLocal), 0.03, 35.0);
+        obs.dopplerFactor = clamp(srD * grD * evalRindlerDoppler(obsLocal), 0.02, 60.0);
 
         return obs;
       }
 
-      // Sky-ray deflection around Black Hole & Wormhole throats (smooth C2 Einstein Ring with zero outer seam!)
+      // Sky-ray deflection around Black Hole & Wormhole throats + Strong-Field Synge Window inverse map!
       vec3 deflectSkyRaySingle(vec3 nCity, vec3 lensPos, float effRs, float maxRadius) {
         vec3 vL = lensPos - uObsPos;
         float dObs = length(vL);
@@ -818,7 +894,6 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
         float bCrit = 2.598 * effRs;
         float bSafe = max(b, bCrit * 1.01);
         float cosPsi = clamp(tProj / dObs, 0.0, 1.0);
-        // Finite-observer Schwarzschild light bending + strong-field photon-sphere term, smoothly windowed
         float fade = 1.0 - smoothstep(maxRadius * 0.45, maxRadius, b);
         float defl = ((effRs * (1.0 + cosPsi)) / bSafe + (1.85 * effRs * effRs) / (bSafe * bSafe)) * fade;
         defl = min(defl, 2.35);
@@ -833,9 +908,26 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
 
       vec3 deflectSkyRayGR(vec3 nCity) {
         if (uEnableGR < 0.5) return nCity;
-        nCity = deflectSkyRaySingle(nCity, uBHPos, uBHRs, 36.0);
-        nCity = deflectSkyRaySingle(nCity, uWormholeAPos, uWormholeR * 0.25, 14.0);
-        nCity = deflectSkyRaySingle(nCity, uWormholeBPos, uWormholeR * 0.25, 14.0);
+
+        // Inverse Synge Strong-Field Escape-Cone Mapping when observer approaches the Event Horizon!
+        vec3 obsFromBH = uObsPos - uBHPos;
+        float rObsBH = length(obsFromBH);
+        if (rObsBH < 3.4 * uBHRs) {
+          float wStrong = 1.0 - smoothstep(1.45 * uBHRs, 3.4 * uBHRs, rObsBH);
+          float thetaWin = max(0.06, evalSyngeEscapeAngle(rObsBH, uBHRs));
+          vec3 uOut = obsFromBH / max(rObsBH, 1e-4);
+          float thetaView = acos(clamp(dot(nCity, uOut), -1.0, 1.0));
+          float chiInf = mix(thetaView, min(3.14159265, thetaView * (3.14159265 / thetaWin)), wStrong);
+          vec3 rotAx = cross(uOut, nCity);
+          float axL = length(rotAx);
+          if (axL > 1e-5 && abs(chiInf - thetaView) > 1e-4) {
+            nCity = normalize(rotateAroundAxis(nCity, rotAx / axL, chiInf - thetaView));
+          }
+        }
+
+        nCity = deflectSkyRaySingle(nCity, uBHPos, uBHRs, 38.0);
+        nCity = deflectSkyRaySingle(nCity, uWormholeAPos, uWormholeR * 0.55, 18.0);
+        nCity = deflectSkyRaySingle(nCity, uWormholeBPos, uWormholeR * 0.55, 18.0);
         return nCity;
       }
 
@@ -863,17 +955,10 @@ export class GeneralRelativityMetric extends MinkowskiMetric {
 
         nCity = deflectSkyRayGR(nCity);
 
-        // Sky photons originate at infinity (r_emit -> inf, g00_emit = 1.0) -> blueshift when observer is deep in BH well!
-        float grSkyD = 1.0;
-        if (uEnableGR > 0.5 && uBHRs > 0.01) {
-          float effRs = uBHRs * 1.45;
-          float rObs = length(uObsPos - uBHPos);
-          float fObs = clamp(1.0 - max(0.0, rObs - 55.0) / 40.0, 0.0, 1.0);
-          float g00Obs = max(0.09, 1.0 - (effRs / max(effRs * 1.04, rObs)) * fObs);
-          grSkyD = 1.0 / sqrt(g00Obs);
-        }
+        // Sky photons originate at infinity (alpha_emit = 1.0) -> strong gravitational blueshift 1/alpha_obs in BH well!
+        float grSkyD = (uEnableGR > 0.5) ? (1.0 / max(0.018, uObsGravAlpha)) : 1.0;
 
-        skyDoppler = clamp(srSkyD * grSkyD * evalRindlerDoppler(nObs * 42.0), 0.03, 35.0);
+        skyDoppler = clamp(srSkyD * grSkyD * evalRindlerDoppler(nObs * 42.0), 0.02, 60.0);
         return nCity;
       }
     `;

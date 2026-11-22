@@ -24,7 +24,7 @@ Then open **http://127.0.0.1:8080** in any modern WebGL2 browser.
 
 | Input | Action |
 | :--- | :--- |
-| `W` / `Up` | Accelerate forward (relativistic momentum impulse $\tilde{\mathbf{p}} = \gamma \mathbf{v}$) |
+| `W` / `Up` | Accelerate forward (exact co-moving proper acceleration $d\eta/d\tau = a_0/c \implies dv/d\tau = (1-\beta^2)a_0$) |
 | `S` / `Down` | Relativistic brake / reverse |
 | `A` / `D` (`Left` / `Right`) | Steer movement heading (camera follows heading unless steered manually) |
 | `Shift` | Photon thruster turbo boost |
@@ -52,13 +52,14 @@ Then open **http://127.0.0.1:8080** in any modern WebGL2 browser.
 6. **Dual-Reference-Frame Web Audio**:
    - **In-Car Frame ($\tau$)**: Cockpit synthwave radio (*Lightcone Overdrive*) and muffled exhaust purr play at invariant $1.0\times$ pitch and tempo in your own reference frame.
    - **City Rest Frame ($t$)**: Clock-tower Westminster chimes, plaza street organ, roadside sync beacons, and rival V10 / Shinkansen flybys undergo exact retarded acoustic/optical Doppler pitch & tempo shifts ($D$) and inverse-square attenuation.
-7. **General Relativity Curved Spacetime (`v2.0` — Black Hole Slingshot & Traversable Wormhole)**:
-   - **Spinning Kerr–Schwarzschild Black Hole (`(-34, 6.2, 54)` — Slingshot Bypass West of Grand Boulevard)**:
-     - Real-time 3D Velocity-Verlet null-geodesic ray-marched Event Horizon shadow ($b_{\text{crit}} = \frac{3\sqrt{3}}{2}\,r_s$), Photon Sphere ring ($r = 1.5\,r_s$), and double-imaged gravitationally lensed Novikov–Thorne accretion disk with Keplerian Doppler beaming ($D^4$) + CIE spectral shift.
-     - Closed-form Einstein-Ring gravitational lensing of surrounding 3D buildings, bridges, rival cars, and sky dome.
-     - **Racing Slingshot vs. Gravitational Time Dilation Trade-off**: Skimming prograde along the Slingshot Bypass whips your momentum forward via Kerr frame-dragging & Oberth assist up to $0.98c$, while Schwarzschild gravitational time dilation ($\alpha = \sqrt{1 - r_s/r}$) accelerates external Grandstand City Time $dt = \gamma\, d\tau / \alpha$ and blueshifts the outside universe!
-   - **Traversable Morris–Thorne Wormhole Shortcut (`Mouth A (-5, -150)` ↔ `Mouth B (201, +54)`)**:
-     - Spherical 3D curved-spacetime throat connecting the North end of Grand Boulevard directly to the East Skyline Back Straight (~450m shortcut!), rendering a live 3D `CubeCamera` panorama of the destination street refracted through Ellis–Bronnikov null geodesics with exterior Casimir negative-energy lensing rings.
+7. **General Relativity Curved Spacetime (`v2.1` — Kerr Black Hole Ergosphere, Finite-Throat Wormhole & Gravitational Waves)**:
+   - **Spinning Kerr–Schwarzschild Black Hole (`(-36, 1.9, 54)` — Ergosphere Basin & Slingshot Bypass)**:
+     - Symplectic Velocity-Verlet 3D null-geodesic raymarcher with static-observer orthonormal tetrad launch, reproducing **Synge's $>180^\circ$ near-horizon shadow cone**, Photon Sphere ring ($r = 1.5\,r_H$), and double-imaged Novikov–Thorne accretion disk with Keplerian Doppler beaming + CIE spectral shift.
+     - **Up to $55.6\times$ Gravitational Time Dilation & Active Ergosphere Frame-Dragging**: Approaching $r \to r_H$ accelerates external Grandstand City Time ($dt = \gamma\, d\tau / \alpha(r)$ — over 60 seconds of city/solar time per 1 second of cockpit time!), compresses & gravitationally blueshifts the entire outside universe overhead, pulls vehicles inward even at rest (`0.000c`), and sweeps vehicles azimuthally via Boyer–Lindquist Kerr frame-dragging.
+   - **Finite-Throat Traversable Morris–Thorne Wormhole (`Mouth A (-5, -150)` ↔ `Mouth B (201, +54)`)**:
+     - Continuous **20-meter curved-spacetime throat** ($ds^2 = -c^2 dt^2 + dl^2 + (b_0^2 + l^2)d\Omega^2$, $l \in [-10\text{ m}, +10\text{ m}]$) solving Ellis–Bronnikov null geodesics across both universes simultaneously with live dynamically updated `CubeCamera` panoramas (~450m track shortcut!).
+   - **Binary Merger Gravitational-Wave Corridor (`East Skyline`)**:
+     - Overhead orbiting Binary Black Hole Inspiral radiating transverse-traceless ($h_+$ / $h_\times$) quadrupole spacetime ripples at speed $c$ through LIGO Fabry–Pérot laser interferometer gates.
 
 ---
 

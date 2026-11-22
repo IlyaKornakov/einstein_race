@@ -2,16 +2,16 @@
  * Relativistic Grand Prix — Main Game Loop, Rest-Frame Radar & Twin-Paradox Race Manager
  */
 
-import { ObserverState, GeneralRelativityMetric } from './physics/spacetime.js?v=2.0';
-import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=2.0';
-import { VehicleController } from './physics/vehicle.js?v=2.0';
-import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=2.0';
-import { buildPBRMaterialLibrary } from './render/textures.js?v=2.0';
-import { buildCityWorld } from './world/cityBuilder.js?v=2.0';
-import { EntityManager } from './world/entities.js?v=2.0';
-import { GeneralRelativitySystem } from './world/generalRelativity.js?v=2.0';
-import { RelativisticRenderer } from './render/renderer.js?v=2.0';
-import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=2.0';
+import { ObserverState, GeneralRelativityMetric } from './physics/spacetime.js?v=2.1';
+import { wavelengthToDisplaySRGB } from './physics/spectral.js?v=2.1';
+import { VehicleController } from './physics/vehicle.js?v=2.1';
+import { RelativisticShaderSystem } from './render/relativisticMaterial.js?v=2.1';
+import { buildPBRMaterialLibrary } from './render/textures.js?v=2.1';
+import { buildCityWorld } from './world/cityBuilder.js?v=2.1';
+import { EntityManager } from './world/entities.js?v=2.1';
+import { GeneralRelativitySystem } from './world/generalRelativity.js?v=2.1';
+import { RelativisticRenderer } from './render/renderer.js?v=2.1';
+import { RelativisticAudioEngine } from './audio/relativisticAudio.js?v=2.1';
 
 function formatClock(seconds) {
   const s = Math.max(0, seconds);
@@ -212,6 +212,15 @@ function createRelativisticRadar(canvas, titleEl, toggleBtn, cityWorld, metric) 
       }
 
       const [bhX, bhY] = projectPt(metric.bhPos[0], metric.bhPos[2]);
+      ctx.save();
+      ctx.setLineDash([2, 3]);
+      ctx.strokeStyle = 'rgba(192, 132, 252, 0.55)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(bhX, bhY, 8.8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
       ctx.strokeStyle = '#f97316';
       ctx.fillStyle = '#000000';
       ctx.lineWidth = 2.2;
@@ -219,6 +228,18 @@ function createRelativisticRadar(canvas, titleEl, toggleBtn, cityWorld, metric) 
       ctx.arc(bhX, bhY, 5.4, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+
+      // Gravitational-Wave Corridor wavefront arcs on East Skyline
+      if (metric.gwPos) {
+        const [gwX, gwY] = projectPt(212.0, 38.0);
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.58)';
+        ctx.lineWidth = 1.4;
+        for (const rArc of [5.5, 9.5]) {
+          ctx.beginPath();
+          ctx.arc(gwX, gwY, rArc, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
     }
 
     // Start / Finish Chequered Line Bar at Z = +94, X in [-8..+8]
@@ -321,7 +342,7 @@ async function init() {
   // Bake live 3D destination cubemaps for Morris–Thorne Wormhole Mouths A & B!
   setProgress(95, 'Synthesizing Morris–Thorne wormhole panoramas & Kerr geodesics…');
   await new Promise((r) => requestAnimationFrame(r));
-  grSystem.bakeWormholePortals(observer);
+  grSystem.bakeWormholePortals(observer, entities, cityWorld, renderer.skyMesh, 'both');
 
   const audio = new RelativisticAudioEngine(metric, cityWorld);
   const grBanner = document.getElementById('grEventBanner');
@@ -331,15 +352,15 @@ async function init() {
     grBanner.textContent = text;
     grBanner.classList.remove('hidden');
     if (grBannerTimer) clearTimeout(grBannerTimer);
-    grBannerTimer = setTimeout(() => grBanner.classList.add('hidden'), 2200);
+    grBannerTimer = setTimeout(() => grBanner.classList.add('hidden'), 2400);
   };
   grSystem.onWormholeTraverse = () => {
     audio.triggerWormholeWarp();
-    flashGRBanner('◎ EINSTEIN–ROSEN WORMHOLE TRAVERSED!');
+    flashGRBanner('◎ ENTERING 20m MORRIS–THORNE WORMHOLE THROAT');
   };
   grSystem.onHorizonReset = () => {
     audio.triggerCollision(0.95);
-    flashGRBanner('● EVENT HORIZON CROSSED • TIDAL EJECTION');
+    flashGRBanner('● EVENT HORIZON CROSSED (r ≤ r_H) • TIDAL EJECTION');
   };
 
   vehicle.getSupportSurface = cityWorld.getSupportSurface;
@@ -352,6 +373,9 @@ async function init() {
 
   // Smart `R` Track Recovery: resets car upright onto nearest road centerline!
   vehicle.onRecoverRequest = () => {
+    if (grSystem.inThroat) {
+      grSystem._exitWormholeThroat(vehicle, entities, cityWorld, renderer.skyMesh, true);
+    }
     const isSky = vehicle.footY > 2.0;
     const ribbon = isSky ? cityWorld.track.skywayData : cityWorld.track.groundData;
     let bestD2 = Infinity;
@@ -389,6 +413,9 @@ async function init() {
 
   function startNewGrandPrix(withCountdown = true) {
     finishModal?.classList.add('hidden');
+    if (grSystem.inThroat) {
+      grSystem._exitWormholeThroat(vehicle, entities, cityWorld, renderer.skyMesh, false);
+    }
     observer.event[0] = 0.0;
     observer.properTime = 0.0;
     vehicle.boostEnergy = 1.0;
@@ -536,8 +563,9 @@ async function init() {
 
     const prevCoordTime = observer.event[0];
     const prevCarZ = vehicle.carZ;
-    grSystem.update(dtReal, observer, vehicle, renderer.settings.timeOfDayHours);
+    grSystem.update(dtReal, observer, vehicle, renderer.settings.timeOfDayHours, entities, cityWorld, renderer.skyMesh);
     vehicle.update(dtReal);
+    grSystem.syncRenderPose(observer);
     const dtCoord = observer.event[0] - prevCoordTime;
 
     const raceCoordElapsed = Math.max(0.0, observer.event[0] - raceState.startCoordTime);
@@ -658,11 +686,19 @@ async function init() {
     const elGravBadge = document.getElementById('gravBadge');
     if (elGravBadge) {
       const gAlpha = observer.gravAlpha ?? 1.0;
-      if (metric.enableGR && gAlpha < 0.965) {
-        elGravBadge.textContent = `GR ${(1.0 / gAlpha).toFixed(2)}×`;
+      if (metric.enableGR && grSystem.inThroat) {
+        const sgn = grSystem.throatL >= 0 ? '+' : '';
+        elGravBadge.textContent = `THROAT l=${sgn}${grSystem.throatL.toFixed(1)}m`;
         elGravBadge.classList.remove('hidden');
+        elGravBadge.classList.add('extreme');
+      } else if (metric.enableGR && gAlpha < 0.975) {
+        const grFac = 1.0 / gAlpha;
+        elGravBadge.textContent = `GR ${grFac >= 10.0 ? grFac.toFixed(1) : grFac.toFixed(2)}×`;
+        elGravBadge.classList.remove('hidden');
+        elGravBadge.classList.toggle('extreme', grFac >= 3.0);
       } else {
         elGravBadge.classList.add('hidden');
+        elGravBadge.classList.remove('extreme');
       }
     }
     elBetaBar.style.width = `${Math.min(100, betaMag * 100).toFixed(1)}%`;
@@ -675,7 +711,7 @@ async function init() {
     elProper.textContent = formatClock(raceProperElapsed);
     elCoord.textContent = formatClock(raceCoordElapsed);
 
-    // Live Solar Clock (advances faster by Lorentz gamma as the Sun races across the sky!)
+    // Live Solar Clock (advances faster by Lorentz gamma * GR time dilation as the Sun races across the sky!)
     const todHrs = renderer.settings.timeOfDayHours;
     const todStr = formatTimeOfDay(todHrs);
     const isNight = todHrs < 6.0 || todHrs > 18.6;
@@ -685,8 +721,9 @@ async function init() {
     const fwdD = signedBeta >= 0
       ? Math.sqrt((1 + betaMag) / Math.max(1e-5, 1 - betaMag))
       : Math.sqrt(Math.max(0, 1 - betaMag) / (1 + betaMag));
-    const effD = renderer.settings.enableDoppler ? fwdD : 1.0;
-    const obsNm = Math.round(632.0 / effD);
+    const gravBlueshift = metric.enableGR ? (1.0 / Math.max(0.018, observer.gravAlpha ?? 1.0)) : 1.0;
+    const effD = (renderer.settings.enableDoppler ? fwdD : 1.0) * gravBlueshift;
+    const obsNm = Math.max(12, Math.round(632.0 / effD));
     const [sr, sg, sb] = wavelengthToDisplaySRGB(632.0, effD);
     const rgbCss = `rgb(${sr}, ${sg}, ${sb})`;
     elSwatch.style.background = rgbCss;
@@ -781,13 +818,42 @@ function bindUI(metric, vehicle, entities, renderer, audio, startNewGrandPrix, r
   bindCheck('chkAccelEquiv', 'enableAccelEquiv');
 
   document.getElementById('btnJumpBH')?.addEventListener('click', () => {
-    vehicle.teleportTo(-13.8, 0.03, 86.0, -0.32);
+    if (window.__relativityApp?.grSystem?.inThroat) {
+      window.__relativityApp.grSystem._exitWormholeThroat(vehicle, entities, window.__relativityApp.cityWorld, renderer.skyMesh, false);
+    }
+    vehicle.teleportTo(-18.5, 0.03, 74.0, -0.72);
     physicsDrawer?.classList.add('hidden');
     togglePhysicsBtn?.classList.remove('active');
   });
 
   document.getElementById('btnJumpWormhole')?.addEventListener('click', () => {
+    if (window.__relativityApp?.grSystem?.inThroat) {
+      window.__relativityApp.grSystem._exitWormholeThroat(vehicle, entities, window.__relativityApp.cityWorld, renderer.skyMesh, false);
+    }
     vehicle.teleportTo(-2.2, 0.02, -116.0, -0.082);
+    physicsDrawer?.classList.add('hidden');
+    togglePhysicsBtn?.classList.remove('active');
+  });
+
+  document.getElementById('btnJumpGW')?.addEventListener('click', () => {
+    const cw = window.__relativityApp?.cityWorld;
+    if (window.__relativityApp?.grSystem?.inThroat) {
+      window.__relativityApp.grSystem._exitWormholeThroat(vehicle, entities, cw, renderer.skyMesh, false);
+    }
+    let gx = 209.5, gy = 1.72, gz = -34.0, gyaw = -3.01;
+    if (cw?.track?.groundData?.frames) {
+      let bestD = Infinity;
+      for (const f of cw.track.groundData.frames) {
+        if (f.pos.x < 180.0) continue;
+        const d = Math.abs(f.pos.z - (-34.0));
+        if (d < bestD) {
+          bestD = d;
+          gx = f.pos.x; gy = f.pos.y + 0.03; gz = f.pos.z;
+          gyaw = Math.atan2(f.tan.x, -f.tan.z);
+        }
+      }
+    }
+    vehicle.teleportTo(gx, gy, gz, gyaw);
     physicsDrawer?.classList.add('hidden');
     togglePhysicsBtn?.classList.remove('active');
   });

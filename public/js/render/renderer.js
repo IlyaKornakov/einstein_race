@@ -424,10 +424,12 @@ export class RelativisticRenderer {
     }
     let targetExp = this.baseTodExposure;
     if (this.settings.autoExposure && this.settings.enableBeaming) {
-      if (betaMag > 0.25) {
-        const fwdD = Math.sqrt((1.0 + betaMag) / Math.max(0.005, 1.0 - betaMag));
-        const adapt = 1.0 / Math.pow(Math.max(1.0, fwdD), 0.44);
-        targetExp *= THREE.MathUtils.clamp(adapt, 0.42, 1.0);
+      const fwdD = betaMag > 0.08 ? Math.sqrt((1.0 + betaMag) / Math.max(0.005, 1.0 - betaMag)) : 1.0;
+      const gravD = (this.settings.enableGR ?? true) ? (1.0 / Math.max(0.025, observer.gravAlpha || 1.0)) : 1.0;
+      const peakD = Math.max(fwdD, gravD);
+      if (peakD > 1.25) {
+        const adapt = 1.0 / Math.pow(peakD, 0.48);
+        targetExp *= THREE.MathUtils.clamp(adapt, 0.24, 1.0);
       }
     }
     this.currentExposure += (targetExp - this.currentExposure) * Math.min(1.0, 5.0 * dtReal);

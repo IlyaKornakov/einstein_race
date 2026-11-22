@@ -44,6 +44,11 @@ export class VehicleController {
     this.py = 0.0;
     this.pz = 0.0;
 
+    // Geodesic gravitational impulse applied during current step (free-fall produces 0 proper G!)
+    this.gravImpulseX = 0.0;
+    this.gravImpulseZ = 0.0;
+    this.inWormholeThroat = false;
+
     /** Chassis heading yaw (0 = -Z North, +pi/2 = +X East) */
     this.moveYaw = 0.0;
     /** Velocity vector horizontal yaw (matches moveYaw under grip, diverges during collision skid!) */
@@ -490,27 +495,33 @@ export class VehicleController {
     let pLat = this.px * rightX + this.pz * rightZ;
     const prevPFwd = pFwd;
 
-    // 1. Brisk Relativistic GT Supercar Thrust (~1.17g normal, ~1.88g Boost) & Carbon-Ceramic Braking (~1.84g)
-    //    Reaches 0.85c-0.94c well along the 350m straightaway without instant 14g snap!
+    // 1. Exact Co-Moving Reference-Frame Proper Acceleration:
+    //    Thrust & braking apply constant proper acceleration a_0 in the car's instantaneous rest frame
+    //    per unit driver proper time dtau (`dt`), stepping forward rapidity linearly:
+    //      d(eta)/dtau = a_0 / c  ==>  d(gamma*v)/dtau = gamma * a_0  ==>  dv/dtau = (1 - beta^2) * a_0
     const cScale = Math.min(2.4, Math.max(0.65, c / 25.0));
-    const engineProperAccel = (boost ? 18.5 : 11.5) * cScale * terrainTraction;
-    const brakeProperDecel = 18.0 * cScale * (0.68 + 0.32 * terrainTraction);
-    const maxBetaClamped = Math.min(0.992, this.maxBeta);
+    const engineProperAccel = (boost ? 16.2 : 9.8) * cScale * terrainTraction;
+    const brakeProperDecel = 16.8 * cScale * (0.68 + 0.32 * terrainTraction);
+    const maxBetaClamped = Math.min(0.994, this.maxBeta);
     const maxPFwd = (maxBetaClamped * c) / Math.sqrt(1.0 - maxBetaClamped * maxBetaClamped);
     const minPFwd = -(0.32 * c) / Math.sqrt(1.0 - 0.10);
 
     if (handbrake) {
       this.cruiseControl = false;
-      pFwd *= Math.exp(-3.6 * dt);
+      const etaCur = Math.asinh(pFwd / c);
+      pFwd = c * Math.sinh(etaCur * Math.exp(-3.4 * dt));
       pLat *= Math.exp(-2.2 * dt);
       if (Math.abs(pFwd) < 0.04) pFwd = 0.0;
     } else if (throttle) {
       this.brakeZeroHoldTimer = 0.0;
       if (pFwd < 0.0) {
-        pFwd = Math.min(0.0, pFwd + brakeProperDecel * 1.45 * dt);
+        const etaCur = Math.asinh(pFwd / c);
+        pFwd = Math.min(0.0, c * Math.sinh(etaCur + ((brakeProperDecel * 1.45) / c) * dt));
       } else {
-        pFwd += engineProperAccel * dt;
-        pFwd *= Math.exp(-(0.028 + terrainExtraDrag) * dt);
+        const etaCur = Math.asinh(pFwd / c);
+        const dragRate = 0.016 + terrainExtraDrag;
+        const etaNext = (etaCur + (engineProperAccel / c) * dt) * Math.exp(-dragRate * dt);
+        pFwd = c * Math.sinh(etaNext);
       }
       pFwd = Math.min(maxPFwd, pFwd);
       if (this.cruiseControl) {
@@ -519,19 +530,22 @@ export class VehicleController {
       }
     } else if (brake) {
       if (pFwd > 0.08) {
-        pFwd = Math.max(0.0, pFwd - brakeProperDecel * dt);
+        const etaCur = Math.asinh(pFwd / c);
+        pFwd = Math.max(0.0, c * Math.sinh(Math.max(0.0, etaCur - (brakeProperDecel / c) * dt)));
         this.brakeZeroHoldTimer = 0.0;
       } else {
         this.brakeZeroHoldTimer += dt;
         if (this.brakeZeroHoldTimer > 0.22) {
           this.cruiseControl = false;
-          pFwd = Math.max(minPFwd, pFwd - 7.5 * cScale * terrainTraction * dt);
+          const etaCur = Math.asinh(pFwd / c);
+          pFwd = Math.max(minPFwd, c * Math.sinh(etaCur - ((7.5 * cScale * terrainTraction) / c) * dt));
         } else {
           pFwd = 0.0;
         }
       }
       if (terrainExtraDrag > 0.0) {
-        pFwd *= Math.exp(-terrainExtraDrag * dt);
+        const etaCur = Math.asinh(pFwd / c);
+        pFwd = c * Math.sinh(etaCur * Math.exp(-terrainExtraDrag * dt));
       }
       if (this.cruiseControl) {
         const bCur = Math.max(0.0, pFwd / Math.sqrt(c2 + pFwd * pFwd));
@@ -539,16 +553,14 @@ export class VehicleController {
       }
     } else if (this.cruiseControl) {
       this.brakeZeroHoldTimer = 0.0;
-      const targetBeta = Math.tanh(this.cruiseRapidity);
-      const targetP = (targetBeta * c) / Math.sqrt(Math.max(1e-6, 1.0 - targetBeta * targetBeta));
-      pFwd += (targetP - pFwd) * Math.min(1.0, 4.5 * terrainTraction * dt);
-      if (terrainExtraDrag > 0.0) {
-        pFwd *= Math.exp(-terrainExtraDrag * dt);
-      }
+      const etaCur = Math.asinh(pFwd / c);
+      const etaNext = etaCur + (this.cruiseRapidity - etaCur) * Math.min(1.0, 4.5 * terrainTraction * dt);
+      pFwd = c * Math.sinh(etaNext * Math.exp(-terrainExtraDrag * dt));
     } else {
       this.brakeZeroHoldTimer = 0.0;
-      // Rolling resistance + aerodynamic drag + off-road turf/sand/water drag
-      pFwd *= Math.exp(-(0.20 + terrainExtraDrag) * dt);
+      // Rolling resistance + aerodynamic drag + off-road turf/sand/water drag in proper rapidity
+      const etaCur = Math.asinh(pFwd / c);
+      pFwd = c * Math.sinh(etaCur * Math.exp(-(0.18 + terrainExtraDrag) * dt));
       if (Math.abs(pFwd) < 0.025) pFwd = 0.0;
     }
 
@@ -675,11 +687,12 @@ export class VehicleController {
       }
     }
 
-    // 4. Physical 4-Corner OBB Highway Barrier & Solid World Obstacle Solver
-    this._solveBarrierCollisions();
-
-    // 5. Physical OBB Car-to-Car Relativistic COM Momentum-Impulse Solver
-    this.resolveVehicleCollisions(this, dtCoord);
+    // 4. Physical 4-Corner OBB Highway Barrier & Solid World Obstacle Solver (bypassed while inside Wormhole Throat!)
+    if (!this.inWormholeThroat) {
+      this._solveBarrierCollisions();
+      // 5. Physical OBB Car-to-Car Relativistic COM Momentum-Impulse Solver
+      this.resolveVehicleCollisions(this, dtCoord);
+    }
 
     // Recompute observer velocity & beta after any collision impulses so frame shaders match!
     const postP2 = this.px * this.px + this.py * this.py + this.pz * this.pz;
@@ -703,10 +716,21 @@ export class VehicleController {
       this.velocityYaw = this.moveYaw;
     }
 
-    // Exact 3D Proper Acceleration Vector `a' = a_long * fwd + (p_fwd * dpsi/dtau) * right`
-    // Feeds Einstein Equivalence-Principle / Rindler optics during turns, braking, and thruster boost!
-    const rawALong = Math.max(-2.6 * c, Math.min(2.6 * c, (postPFwd - prevPFwd) / dt));
-    const rawALat = Math.max(-2.8 * c, Math.min(2.8 * c, postPFwd * totalYawRate));
+    // Exact 3D Co-Moving Proper Acceleration Vector `a' = c * d(eta)/dtau` relative to free-fall geodesic!
+    // By Einstein's Equivalence Principle, pure free-fall (`postP == prevP`) registers 0g, whereas
+    // thrusting outward to hover stationary near the Black Hole registers full relativistic proper G-force!
+    const gravLat = this.gravImpulseX * rightX + this.gravImpulseZ * rightZ;
+    this.gravImpulseX = 0.0;
+    this.gravImpulseZ = 0.0;
+
+    // Note: `prevPFwd` already contains `gravImpulse` applied before `vehicle.update`, so free-fall reference is `prevPFwd`
+    // while non-gravitational proper thrust/support acceleration also opposes `gravFwd` when hovering against brakes/tires!
+    const postEtaFwd = Math.asinh(postPFwd / c);
+    const prevEtaFwd = Math.asinh(prevPFwd / c);
+    const kinALong = c * (postEtaFwd - prevEtaFwd) / dt;
+    const hoverSupportLat = -gravLat / dt;
+    const rawALong = Math.max(-2.6 * c, Math.min(2.6 * c, kinALong));
+    const rawALat = Math.max(-2.8 * c, Math.min(2.8 * c, (postPFwd / Math.max(1.0, postGamma)) * totalYawRate * postGamma + hoverSupportLat));
     const targetAx = fwdX * rawALong + rightX * rawALat;
     const targetAz = fwdZ * rawALong + rightZ * rawALat;
     const accelSmooth = Math.min(1.0, 11.0 * dt);
@@ -836,6 +860,13 @@ export class VehicleController {
    * Synchronizes `observer.event[1..3]` (camera world eye position) from `carPos` and `viewMode`.
    */
   _syncObserverPosition() {
+    if (!this.observer.carPos) {
+      this.observer.carPos = new Float64Array(3);
+    }
+    this.observer.carPos[0] = this.carX;
+    this.observer.carPos[1] = this.footY + 0.65;
+    this.observer.carPos[2] = this.carZ;
+
     const fwdX = Math.sin(this.moveYaw);
     const fwdZ = -Math.cos(this.moveYaw);
     const rightX = Math.cos(this.moveYaw);

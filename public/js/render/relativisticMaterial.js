@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { computeCalibratedSpectralMatrix, buildSpectralLUTData, getSpectralGLSL } from '../physics/spectral.js?v=2.0';
+import { computeCalibratedSpectralMatrix, buildSpectralLUTData, getSpectralGLSL } from '../physics/spectral.js?v=2.1';
 
 function createSpectralLUTTexture() {
   const { width, height, floats } = buildSpectralLUTData();
@@ -56,13 +56,15 @@ export class RelativisticShaderSystem {
       uRgbToSpectralWeights: { value: spectralMat3 },
       uSpectralLUT: { value: spectralLUT },
 
-      // General Relativity (v2.0) Shared Uniforms
+      // General Relativity (v2.1) Shared Uniforms
       uEnableGR: { value: 1.0 },
-      uBHPos: { value: new THREE.Vector3(-34.0, 6.2, 54.0) },
-      uBHRs: { value: 4.4 },
-      uWormholeAPos: { value: new THREE.Vector3(-5.0, 3.1, -150.0) },
-      uWormholeBPos: { value: new THREE.Vector3(201.0, 4.0, 54.0) },
+      uBHPos: { value: new THREE.Vector3(-36.0, 1.90, 54.0) },
+      uBHRs: { value: 3.50 },
+      uObsGravAlpha: { value: 1.0 },
+      uWormholeAPos: { value: new THREE.Vector3(-5.0, 2.55, -150.0) },
+      uWormholeBPos: { value: new THREE.Vector3(201.0, 3.45, 54.0) },
       uWormholeR: { value: 4.2 },
+      uGWPos: { value: new THREE.Vector3(275.0, 52.0, 28.0) },
 
       // Atmospheric / Time-of-Day uniforms shared with Sky & PMREM env cubemap
       uSunDir: { value: new THREE.Vector3(0.45, 0.72, 0.52).normalize() },
@@ -120,6 +122,7 @@ export class RelativisticShaderSystem {
     su.uEnableAccelEquiv.value = (settings.enableAccelEquiv ?? true) ? 1.0 : 0.0;
     const grOn = (settings.enableGR ?? true);
     su.uEnableGR.value = grOn ? 1.0 : 0.0;
+    su.uObsGravAlpha.value = grOn ? (observer.gravAlpha ?? 1.0) : 1.0;
     if (this.metric && 'enableGR' in this.metric) {
       this.metric.enableGR = grOn;
       if (this.metric.bhPos) {
@@ -128,6 +131,9 @@ export class RelativisticShaderSystem {
         su.uWormholeAPos.value.set(this.metric.wormholeA[0], this.metric.wormholeA[1], this.metric.wormholeA[2]);
         su.uWormholeBPos.value.set(this.metric.wormholeB[0], this.metric.wormholeB[1], this.metric.wormholeB[2]);
         su.uWormholeR.value = this.metric.wormholeThroatR;
+      }
+      if (this.metric.gwPos) {
+        su.uGWPos.value.set(this.metric.gwPos[0], this.metric.gwPos[1], this.metric.gwPos[2]);
       }
     }
     su.uObsProperAccel.value.set(
@@ -159,7 +165,7 @@ export class RelativisticShaderSystem {
     const metricGLSL = this.metric.getShaderModule();
     const spectralGLSL = getSpectralGLSL();
 
-    const cacheTag = `rel_gr_v2_${material.type}`;
+    const cacheTag = `rel_gr_v22_${material.type}`;
     material.customProgramCacheKey = () => cacheTag;
 
     material.onBeforeCompile = (shader) => {
@@ -328,6 +334,7 @@ export class RelativisticShaderSystem {
         uniform float uEnableGR;
         uniform vec3 uBHPos;
         uniform float uBHRs;
+        uniform float uObsGravAlpha;
         uniform float uSpectralUV;
         uniform float uSpectralNIR;
         uniform float uNarrowBandNm;
@@ -367,14 +374,17 @@ export class RelativisticShaderSystem {
 
         float evalFragGravDoppler(vec3 emitWorld) {
           if (uEnableGR < 0.5 || uBHRs <= 0.01) return 1.0;
-          float effRs = uBHRs * 1.45;
           float rEmit = length(emitWorld - uBHPos);
-          float rObs = length(uObsPos - uBHPos);
-          float fEmit = clamp(1.0 - max(0.0, rEmit - 55.0) / 40.0, 0.0, 1.0);
-          float fObs = clamp(1.0 - max(0.0, rObs - 55.0) / 40.0, 0.0, 1.0);
-          float g00Emit = max(0.09, 1.0 - (effRs / max(effRs * 1.04, rEmit)) * fEmit);
-          float g00Obs = max(0.09, 1.0 - (effRs / max(effRs * 1.04, rObs)) * fObs);
-          return sqrt(g00Emit / g00Obs);
+          float alphaEmit = 1.0;
+          if (rEmit < 105.0) {
+            float rSafe = max(uBHRs * 1.0005, rEmit);
+            float u = uBHRs / rSafe;
+            float u2 = u * u;
+            float rawA = pow(max(0.0, 1.0 - u), 1.15) / (1.0 + 6.5 * u2 + 12.0 * u2 * u2);
+            float fade = clamp((105.0 - rEmit) / 40.0, 0.0, 1.0);
+            alphaEmit = clamp(1.0 - (1.0 - rawA) * fade, 0.018, 1.0);
+          }
+          return clamp(alphaEmit / max(0.018, uObsGravAlpha), 0.02, 55.0);
         }
 
         // True Ray-Box 3D Parallax Interior Mapping for Apartment & Skyscraper Windows
@@ -505,7 +515,7 @@ export class RelativisticShaderSystem {
             float numDPx = uObsGamma * ( 1.0 - dot( uObsBeta, photonDirPx ) );
             float denDPx = ( uIsDynamic > 0.5 ) ? ( uEntityGamma * ( 1.0 - dot( uEntityBeta, photonDirPx ) ) ) : 1.0;
             float grDPx = evalFragGravDoppler( uObsPos + vCityEmitOffset );
-            fragDoppler = clamp( ( numDPx / max( denDPx, 1e-4 ) ) * grDPx * evalFragRindler( vObsLocalPos ), 0.03, 35.0 );
+            fragDoppler = clamp( ( numDPx / max( denDPx, 1e-4 ) ) * grDPx * evalFragRindler( vObsLocalPos ), 0.02, 60.0 );
             if ( uIsDynamic < 0.5 ) {
               fragEmitTime = uObsTime - ( uEnableRetardation * dPx ) / uSpeedOfLight;
             }

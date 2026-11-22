@@ -19,7 +19,7 @@ import { GLTFLoader } from '../../vendor/GLTFLoader.js';
 import { DRACOLoader } from '../../vendor/DRACOLoader.js';
 import { clone as cloneSkeleton } from '../../vendor/SkeletonUtils.js';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.0';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.1';
 
 /**
  * Merges static child submeshes sharing identical Material & vertex attribute layout inside a
@@ -213,6 +213,18 @@ export class EntityManager {
 
     this._initSparkSystem();
     this._buildBulletTrain();
+  }
+
+  /**
+   * Hides/restores all exterior world entities while keeping `playerCar` visible during
+   * continuous curved-spacetime Morris–Thorne Wormhole Throat traversal.
+   */
+  setExteriorHidden(hidden) {
+    const playerRoot = this.playerCar ? this.playerCar.root : null;
+    for (let i = 0; i < this.group.children.length; i++) {
+      const ch = this.group.children[i];
+      if (ch !== playerRoot) ch.visible = !hidden;
+    }
   }
 
   _findGroundS(x, z) {

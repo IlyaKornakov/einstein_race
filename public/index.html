@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Relativistic Grand Prix v2.0 — General &amp; Special Relativity 3D Racing</title>
-  <link rel="stylesheet" href="./styles.css?v=2.0" />
+  <title>Relativistic Grand Prix v2.1 — Faithful General &amp; Special Relativity 3D Racing</title>
+  <link rel="stylesheet" href="./styles.css?v=2.1" />
   <script type="importmap">
     {
       "imports": {
@@ -61,7 +61,7 @@
   <!-- Top-Left Sleek Controls & Camera / Physics Bar -->
   <div id="hudTopLeft" class="hud-panel hud-top-left">
     <div class="brand-row">
-      <span class="brand-badge">GR GP v2.0</span>
+      <span class="brand-badge">GR GP v2.1</span>
       <span class="brand-name">Relativistic Circuit</span>
       <span id="fpsReadout" class="fps-pill">60 FPS</span>
       <button id="togglePhysicsBtn" class="settings-pill" title="Open Spacetime &amp; Physics Tuning">⚙ Physics</button>
@@ -108,7 +108,7 @@
 
       <div class="toggles-section">
         <div class="section-caption">Relativistic Effects (SR &amp; GR)</div>
-        <label class="check-row"><input type="checkbox" id="chkGeneralRel" checked /><span>General Relativity (Black Hole &amp; Wormhole)</span></label>
+        <label class="check-row"><input type="checkbox" id="chkGeneralRel" checked /><span>General Relativity (BH, Wormhole &amp; GW)</span></label>
         <label class="check-row"><input type="checkbox" id="chkRetardation" checked /><span>Light-Time Retardation (Terrell)</span></label>
         <label class="check-row"><input type="checkbox" id="chkLorentz" checked /><span>Lorentz Contraction &amp; Dilation</span></label>
         <label class="check-row"><input type="checkbox" id="chkAberration" checked /><span>Relativistic Aberration (Starbow)</span></label>
@@ -116,8 +116,9 @@
         <label class="check-row"><input type="checkbox" id="chkBeaming" checked /><span>Headlight Beaming (D⁴)</span></label>
         <label class="check-row"><input type="checkbox" id="chkAccelEquiv" checked /><span>Turn / Accel Gravity (Equivalence)</span></label>
         <div class="tod-pills" style="margin-top:5px;">
-          <button type="button" id="btnJumpBH" class="pill-btn" title="Jump to Black Hole Slingshot Approach">● Black Hole</button>
-          <button type="button" id="btnJumpWormhole" class="pill-btn" title="Jump to Morris–Thorne Wormhole Approach">◎ Wormhole</button>
+          <button type="button" id="btnJumpBH" class="pill-btn" title="Jump to Kerr Black Hole Ergosphere Basin (up to 55× time dilation!)">● Black Hole</button>
+          <button type="button" id="btnJumpWormhole" class="pill-btn" title="Jump to 20m Curved Morris–Thorne Wormhole Throat">◎ Wormhole</button>
+          <button type="button" id="btnJumpGW" class="pill-btn" title="Jump to East Skyline Gravitational-Wave Interferometer Corridor">≈ Grav-Waves</button>
         </div>
       </div>
 
@@ -229,6 +230,6 @@
     </div>
   </div>
 
-  <script type="module" src="./js/main.js?v=2.0"></script>
+  <script type="module" src="./js/main.js?v=2.1"></script>
 </body>
 </html>

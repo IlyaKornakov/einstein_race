@@ -452,10 +452,10 @@ export class RelativisticAudioEngine {
       }
       if ((settings.enableGR ?? true) && this.metric.gravLapseAt) {
         const emitAlpha = this.metric.gravLapseAt(sx, sy, sz);
-        const obsAlpha = Math.max(0.08, observer.gravAlpha || 1.0);
+        const obsAlpha = Math.max(0.02, observer.gravAlpha || 1.0);
         doppler *= emitAlpha / obsAlpha;
       }
-      doppler = Math.max(0.18, Math.min(6.5, doppler));
+      doppler = Math.max(0.18, Math.min(8.0, doppler));
     }
 
     let appX = dx;

@@ -882,6 +882,15 @@ export function createTrackSystem(materials, shaderSystem) {
       }
     }
 
+    // 1B. Black Hole Ergosphere Obsidian Apron (r <= 24m around (-36, 54)): full road traction right up to r_H!
+    if (Math.hypot(x - (-36.0), z - 54.0) <= 24.0) {
+      if (0.025 > groundY) {
+        groundY = 0.025;
+        groundDeck = 'ground';
+        groundTerrain = 'road';
+      }
+    }
+
     // 2. Scan Ground Grand Prix Loop (unconditional solid earth + sloped embankment!) & Elevated Skyway
     const cx = Math.floor(x / CELL_SIZE);
     const cz = Math.floor(z / CELL_SIZE);

@@ -19,8 +19,8 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from '../../vendor/BufferGeometryUtils.js';
-import { createTrackSystem } from './trackBuilder.js?v=2.0';
-import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.0';
+import { createTrackSystem } from './trackBuilder.js?v=2.1';
+import { IS_MOBILE_DEVICE } from '../render/renderer.js?v=2.1';
 
 const _mat4 = new THREE.Matrix4();
 const _quat = new THREE.Quaternion();
@@ -988,7 +988,7 @@ export function buildCityWorld(materials, shaderSystem) {
       // [cx, baseY, cz, rotY, isTerrellGrid]
       [12.4, 0.0, 128.0, -0.36, true],
       [13.6, 0.0, 52.0, -0.36, false],
-      [-28.5, 0.0, 18.0, 0.48, true],
+      [-32.0, 0.0, -2.0, 0.48, true],
       [12.4, 0.0, -36.0, -0.40, false],
       [-12.8, 0.0, -108.0, 0.36, true],
       [152.0, 0.9, -212.0, -0.78, false],
